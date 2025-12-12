@@ -24,6 +24,7 @@ const lootboxAbi = parseAbi([
 ]);
 
 const keysAbi = parseAbi(["function balanceOf(address account, uint256 id) view returns (uint256)"]);
+const REWARD_TITLE = "Quills NFT";
 
 export default function LootboxPage() {
   const { appKit } = useReown() || {};
@@ -169,6 +170,17 @@ export default function LootboxPage() {
 
   async function onOpen() {
     beginOpenFlow();
+  }
+
+  function shareOnX() {
+    const text = `Удача была на моей стороне: получил ${REWARD_TITLE} в Somnia Lootbox! #Somnia #Lootbox #Web3`;
+    const url = typeof window !== "undefined" ? window.location.href : "https://quests.somnia.network";
+    const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+    if (typeof window !== "undefined") {
+      window.open(tweetUrl, "_blank", "noopener,noreferrer");
+      setRewardVisible(false);
+      setRewardDone(false);
+    }
   }
 
   const rewardMode = rewardVisible || rewardDone;
@@ -325,18 +337,8 @@ export default function LootboxPage() {
           />
           {rewardDone && (
             <div className="reward-dismiss">
-              <button
-                className="btn ghost"
-                onClick={() => {
-                  if (rewardRef.current) {
-                    rewardRef.current.pause();
-                    rewardRef.current.currentTime = 0;
-                  }
-                  setRewardVisible(false);
-                  setRewardDone(false);
-                }}
-              >
-                Got it
+              <button className="btn ghost" onClick={shareOnX}>
+                Share on X
               </button>
             </div>
           )}
