@@ -313,6 +313,7 @@ body::before {
   transition: transform .14s ease, filter .2s ease, box-shadow .2s ease, opacity .2s ease;
   transform: translate3d(0, var(--chest-offset), 0);
   transform-origin: center center;
+  --chest-anim-offset: var(--chest-offset);
 }
 .chest-hit::before {
   display: none;
@@ -322,8 +323,8 @@ body::before {
   animation: none;
 }
 .chest-hit.is-idle:hover {
-  animation: vibrate 0.22s linear infinite;
-  transform: translate3d(0, var(--chest-offset), 0) scale(1.04);
+  animation: vibrate-fixed 0.22s linear infinite;
+  transform: translate3d(0, var(--chest-anim-offset), 0) scale(1.04);
   filter: none;
 }
 .chest-hit.is-rewarding,
@@ -339,7 +340,7 @@ body::before {
   animation: none;
 }
 .chest-hit.is-idle:active {
-  transform: translate3d(0, var(--chest-offset), 0) scale(0.98);
+  transform: translate3d(0, var(--chest-anim-offset), 0) scale(0.98);
 }
 .chest-hit.is-opening {
   filter: none;
@@ -534,13 +535,13 @@ body::before {
 .inline-stats.center { justify-content: center; }
 .win.center { text-align: center; }
 
-@keyframes vibrate {
-  0% { transform: translate3d(0,0,0); }
-  20% { transform: translate3d(-1px, 1px, 0); }
-  40% { transform: translate3d(1px, -1px, 0); }
-  60% { transform: translate3d(-1px, -1px, 0); }
-  80% { transform: translate3d(1px, 1px, 0); }
-  100% { transform: translate3d(0,0,0); }
+@keyframes vibrate-fixed {
+  0% { transform: translate3d(0, var(--chest-anim-offset), 0) scale(1.04); }
+  20% { transform: translate3d(-1px, calc(var(--chest-anim-offset) + 1px), 0) scale(1.04); }
+  40% { transform: translate3d(1px, calc(var(--chest-anim-offset) - 1px), 0) scale(1.04); }
+  60% { transform: translate3d(-1px, calc(var(--chest-anim-offset) - 1px), 0) scale(1.04); }
+  80% { transform: translate3d(1px, calc(var(--chest-anim-offset) + 1px), 0) scale(1.04); }
+  100% { transform: translate3d(0, var(--chest-anim-offset), 0) scale(1.04); }
 }
 .lootbox-video {
   width: 100%;
@@ -752,9 +753,9 @@ body::before {
 
 @media (max-width: 640px) {
   .chest-stage { transform: translateY(var(--stage-offset-mobile)); }
-  .chest-hit { transform: translate3d(0, var(--chest-offset-mobile), 0); }
-  .chest-hit.is-idle:hover { animation: vibrate 0.22s linear infinite; transform: translate3d(0, var(--chest-offset-mobile), 0) scale(1.03); }
-  .chest-hit.is-idle:active { transform: translate3d(0, var(--chest-offset-mobile), 0) scale(0.98); }
+  .chest-hit { transform: translate3d(0, var(--chest-offset-mobile), 0); --chest-anim-offset: var(--chest-offset-mobile); }
+  .chest-hit.is-idle:hover { animation: vibrate-fixed 0.22s linear infinite; transform: translate3d(0, var(--chest-anim-offset), 0) scale(1.03); }
+  .chest-hit.is-idle:active { transform: translate3d(0, var(--chest-anim-offset), 0) scale(0.98); }
   .cta-stack { margin-top: clamp(-220px, -28vh, -120px); }
 }
 
