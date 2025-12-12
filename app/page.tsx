@@ -279,7 +279,6 @@ export default function LootboxPage() {
             <button className="btn primary xl" disabled={!canOpen} onClick={onOpen}>
               {opening ? "Rolling…" : "Open the Somnia Lootbox"}
             </button>
-            <p className="cta-sub">Ultra-fast mainnet · On-chain RNG · One tap</p>
           </div>
         </section>
       </main>
@@ -392,4 +391,5 @@ export default function LootboxPage() {
     </div>
   );
 }
+
 
