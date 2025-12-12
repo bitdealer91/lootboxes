@@ -17,8 +17,8 @@
   --btn-border: rgba(255, 255, 255, 0.18);
   --stage-offset: -140px;
   --stage-offset-mobile: -100px;
-  --chest-offset: -60px;
-  --chest-offset-mobile: -30px;
+  --chest-offset: -110px;
+  --chest-offset-mobile: -70px;
 }
 
 * { box-sizing: border-box; }
