@@ -331,7 +331,7 @@ body::before {
 .chest-hit.is-rewarding:hover,
 .chest-hit.is-rewarding:active {
   animation: none;
-  transform: none;
+  transform: translate3d(0, var(--chest-anim-offset), 0);
   filter: none;
 }
 .chest-hit:focus-visible {
