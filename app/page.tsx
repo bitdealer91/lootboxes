@@ -25,6 +25,7 @@ const lootboxAbi = parseAbi([
 
 const keysAbi = parseAbi(["function balanceOf(address account, uint256 id) view returns (uint256)"]);
 const REWARD_TITLE = "Quills NFT";
+const SHARE_TEXT = "Luck was on my side—just pulled a Quills NFT from the Somnia Lootbox. On-chain, fast, and mine. #Somnia #Lootbox #Web3";
 
 export default function LootboxPage() {
   const { appKit } = useReown() || {};
@@ -173,7 +174,7 @@ export default function LootboxPage() {
   }
 
   function shareOnX() {
-    const text = `Удача была на моей стороне: получил ${REWARD_TITLE} в Somnia Lootbox! #Somnia #Lootbox #Web3`;
+    const text = SHARE_TEXT;
     const url = typeof window !== "undefined" ? window.location.href : "https://quests.somnia.network";
     const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
     if (typeof window !== "undefined") {
