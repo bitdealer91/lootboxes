@@ -496,7 +496,7 @@ body::before {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  margin-top: clamp(-90px, -8vh, -50px);
+  margin-top: clamp(-140px, -12vh, -70px);
 }
 .cta-stack .btn.xl {
   min-width: 260px;
@@ -746,7 +746,7 @@ body::before {
 
 @media (max-width: 640px) {
   .chest-stage { margin-top: -80px; }
-  .cta-stack { margin-top: clamp(-70px, -10vh, -36px); }
+  .cta-stack { margin-top: clamp(-110px, -14vh, -50px); }
 }
 
 
