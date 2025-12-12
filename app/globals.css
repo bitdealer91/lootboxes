@@ -15,6 +15,8 @@
   --btn-grad-end: #ff3fb4;
   --btn-glow: 0 0 24px rgba(123, 91, 255, 0.45), 0 0 48px rgba(255, 63, 180, 0.28);
   --btn-border: rgba(255, 255, 255, 0.18);
+  --stage-offset: -40px;
+  --stage-offset-mobile: -12px;
 }
 
 * { box-sizing: border-box; }
@@ -283,7 +285,8 @@ body::before {
   display: grid;
   place-items: center;
   isolation: isolate;
-  margin: -110px auto 0;
+  margin: 0 auto;
+  transform: translateY(var(--stage-offset));
   animation: fade-up 0.6s ease both;
   mask-image: radial-gradient(circle at 50% 50%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 78%);
   -webkit-mask-image: radial-gradient(circle at 50% 50%, rgba(0,0,0,1) 58%, rgba(0,0,0,0) 78%);
@@ -745,7 +748,7 @@ body::before {
 }
 
 @media (max-width: 640px) {
-  .chest-stage { margin-top: -80px; }
+  .chest-stage { transform: translateY(var(--stage-offset-mobile)); }
   .cta-stack { margin-top: clamp(-110px, -14vh, -50px); }
 }
 
