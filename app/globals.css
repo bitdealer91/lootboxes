@@ -17,8 +17,8 @@
   --btn-border: rgba(255, 255, 255, 0.18);
   --stage-offset: -140px;
   --stage-offset-mobile: -100px;
-  --chest-offset: -110px;
-  --chest-offset-mobile: -70px;
+  --chest-offset: -125px;
+  --chest-offset-mobile: -80px;
 }
 
 * { box-sizing: border-box; }
@@ -322,7 +322,7 @@ body::before {
   animation: none;
 }
 .chest-hit.is-idle:hover {
-  animation: none;
+  animation: vibrate 0.22s linear infinite;
   transform: translate3d(0, var(--chest-offset), 0) scale(1.04);
   filter: none;
 }
@@ -753,7 +753,7 @@ body::before {
 @media (max-width: 640px) {
   .chest-stage { transform: translateY(var(--stage-offset-mobile)); }
   .chest-hit { transform: translate3d(0, var(--chest-offset-mobile), 0); }
-  .chest-hit.is-idle:hover { transform: translate3d(0, var(--chest-offset-mobile), 0) scale(1.03); }
+  .chest-hit.is-idle:hover { animation: vibrate 0.22s linear infinite; transform: translate3d(0, var(--chest-offset-mobile), 0) scale(1.03); }
   .chest-hit.is-idle:active { transform: translate3d(0, var(--chest-offset-mobile), 0) scale(0.98); }
   .cta-stack { margin-top: clamp(-220px, -28vh, -120px); }
 }
