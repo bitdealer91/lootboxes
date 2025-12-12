@@ -15,8 +15,8 @@
   --btn-grad-end: #ff3fb4;
   --btn-glow: 0 0 24px rgba(123, 91, 255, 0.45), 0 0 48px rgba(255, 63, 180, 0.28);
   --btn-border: rgba(255, 255, 255, 0.18);
-  --stage-offset: -40px;
-  --stage-offset-mobile: -12px;
+  --stage-offset: -90px;
+  --stage-offset-mobile: -60px;
 }
 
 * { box-sizing: border-box; }
@@ -499,7 +499,7 @@ body::before {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  margin-top: clamp(-140px, -12vh, -70px);
+  margin-top: clamp(-170px, -16vh, -90px);
 }
 .cta-stack .btn.xl {
   min-width: 260px;
@@ -749,7 +749,7 @@ body::before {
 
 @media (max-width: 640px) {
   .chest-stage { transform: translateY(var(--stage-offset-mobile)); }
-  .cta-stack { margin-top: clamp(-110px, -14vh, -50px); }
+  .cta-stack { margin-top: clamp(-130px, -18vh, -70px); }
 }
 
 
