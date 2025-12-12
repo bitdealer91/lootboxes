@@ -17,6 +17,8 @@
   --btn-border: rgba(255, 255, 255, 0.18);
   --stage-offset: -140px;
   --stage-offset-mobile: -100px;
+  --chest-offset: -60px;
+  --chest-offset-mobile: -30px;
 }
 
 * { box-sizing: border-box; }
@@ -309,7 +311,7 @@ body::before {
   place-items: center;
   cursor: pointer;
   transition: transform .14s ease, filter .2s ease, box-shadow .2s ease, opacity .2s ease;
-  transform: translateZ(0);
+  transform: translate3d(0, var(--chest-offset), 0);
 }
 .chest-hit::before {
   display: none;
@@ -320,7 +322,7 @@ body::before {
 }
 .chest-hit.is-idle:hover {
   animation: vibrate 0.22s linear infinite;
-  transform: scale(1.06);
+  transform: translate3d(0, var(--chest-offset), 0) scale(1.06);
   filter: none;
 }
 .chest-hit.is-rewarding,
@@ -336,7 +338,7 @@ body::before {
   animation: none;
 }
 .chest-hit.is-idle:active {
-  transform: scale(0.97);
+  transform: translate3d(0, var(--chest-offset), 0) scale(0.97);
 }
 .chest-hit.is-opening {
   filter: none;
@@ -499,7 +501,7 @@ body::before {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  margin-top: clamp(-220px, -20vh, -120px);
+  margin-top: clamp(-260px, -24vh, -140px);
 }
 .cta-stack .btn.xl {
   min-width: 260px;
@@ -749,7 +751,10 @@ body::before {
 
 @media (max-width: 640px) {
   .chest-stage { transform: translateY(var(--stage-offset-mobile)); }
-  .cta-stack { margin-top: clamp(-180px, -24vh, -100px); }
+  .chest-hit { transform: translate3d(0, var(--chest-offset-mobile), 0); }
+  .chest-hit.is-idle:hover { transform: translate3d(0, var(--chest-offset-mobile), 0) scale(1.06); }
+  .chest-hit.is-idle:active { transform: translate3d(0, var(--chest-offset-mobile), 0) scale(0.97); }
+  .cta-stack { margin-top: clamp(-220px, -28vh, -120px); }
 }
 
 
