@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, useReadContracts, useWriteContract } from "wagmi";
 import { parseAbi } from "viem";
-import { useReown } from "../providers/AppKitProvider";
+import { useReown } from "./providers/AppKitProvider";
 // @ts-expect-error Aurora is a JS component with no types
-import Aurora from "./Aurora";
+import Aurora from "./lootbox/Aurora";
 // @ts-expect-error TiltedCard is a JS component with no types
-import TiltedCard from "./TiltedCard";
+import TiltedCard from "./lootbox/TiltedCard";
 
 const LOOTBOX = (process.env.NEXT_PUBLIC_LOOTBOX_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`;
 const KEYS = (process.env.NEXT_PUBLIC_KEYS_ADDRESS || "0x2d535a2588E7c3f5F213F3b3324F44E146Ca5306") as `0x${string}`;
@@ -392,5 +392,4 @@ export default function LootboxPage() {
     </div>
   );
 }
-
 
