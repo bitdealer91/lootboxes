@@ -5,7 +5,7 @@ import { createAppKit } from "@reown/appkit";
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 import { http, WagmiProvider, type Config } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { somniaMainnet } from "./chains";
+import { somniaChain } from "./chains";
 
 const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID as string | undefined;
 const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "https://api.infra.mainnet.somnia.network/";
@@ -20,14 +20,14 @@ export function AppKitProvider({ children }: { children: React.ReactNode }) {
 
     const adapter = new WagmiAdapter({
       projectId,
-      networks: [somniaMainnet],
-      transports: { [somniaMainnet.id]: http(rpcUrl) }
+      networks: [somniaChain],
+      transports: { [somniaChain.id]: http(rpcUrl) }
     });
 
     const appKit = createAppKit({
       adapters: [adapter],
       projectId,
-      networks: [somniaMainnet],
+      networks: [somniaChain],
       features: { analytics: false },
       metadata: {
         name: "Somnia Quests",

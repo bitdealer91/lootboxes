@@ -58,6 +58,17 @@
   display: block;
 }
 
+/* Allow specific media items to override default cover-fit */
+.tilted-card-media > *.media-contain {
+  object-fit: contain;
+  background: transparent;
+}
+
+.tilted-card-media > *.media-scale-60 {
+  transform: scale(0.6);
+  transform-origin: center;
+}
+
 .tilted-card-overlay {
   position: absolute;
   top: 0;
@@ -80,3 +91,10 @@
   opacity: 0;
   z-index: 3;
 }
+
+
+
+
+
+
+

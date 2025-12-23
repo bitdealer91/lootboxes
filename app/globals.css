@@ -302,6 +302,26 @@ body::before {
 .stage-particles {
   display: none;
 }
+
+/* Win-only chest VFX (extra particles) */
+/* Win fireworks video overlay */
+.fireworks-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  /* Above reward-backdrop (z=12), below reward card (z=9999) */
+  z-index: 9000;
+  display: grid;
+  place-items: center;
+}
+.fireworks-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.15) contrast(1.05);
+  mix-blend-mode: screen;
+  opacity: 0.95;
+}
 .chest-hit {
   position: relative;
   width: 88%;
@@ -463,6 +483,29 @@ body::before {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.input-row.stepper {
+  gap: 10px;
+}
+.step-btn {
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 14px;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Hide native number spinners (we use custom +/- buttons) */
+input.neo-input[type="number"]::-webkit-outer-spin-button,
+input.neo-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input.neo-input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 .neo-input {
   flex: 1;
@@ -650,6 +693,63 @@ body::before {
 .reward-backdrop.is-visible {
   opacity: 1;
   pointer-events: all;
+}
+
+.toast-stack {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 10050;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(380px, calc(100vw - 24px));
+}
+.toast {
+  background: linear-gradient(160deg, rgba(26, 31, 61, 0.85), rgba(12, 15, 34, 0.92));
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 18px;
+  padding: 12px 12px 10px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 0 24px rgba(123, 91, 255, 0.22);
+  backdrop-filter: blur(14px);
+}
+.toast-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.toast-title {
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  font-family: var(--font-heading);
+  font-size: 14px;
+}
+.toast-sub {
+  margin-top: 6px;
+  font-size: 12px;
+  color: rgba(232,236,255,0.82);
+  word-break: break-all;
+}
+.toast-link {
+  color: #7ef0ff;
+  text-decoration: none;
+}
+.toast-link:hover { text-decoration: underline; }
+.toast-close {
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: rgba(244,247,255,0.9);
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  line-height: 1;
+  font-weight: 800;
+}
+.toast-close:hover {
+  border-color: rgba(142,107,255,0.38);
+  box-shadow: 0 12px 28px rgba(142,107,255,0.18);
 }
 
 .floating-card {

@@ -17,3 +17,9 @@ pnpm-debug.log*
 .vercel
 .idea
 .vscode
+.pydeps
+.pydeps/
+hardhat/artifacts
+hardhat/artifacts/
+hardhat/cache
+hardhat/cache/
