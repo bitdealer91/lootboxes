@@ -69,9 +69,10 @@ export default function TestnetFlowPage() {
 
   const inputTotal = useMemo(() => {
     if (!balances) return 0n;
-    return balances.reduce((acc, e) => {
+    return balances.reduce((acc, entry) => {
+      const e = entry as unknown as { status?: string; result?: unknown } | undefined;
       if (!e || e.status !== "success" || e.result === undefined) return acc;
-      return acc + BigInt(e.result);
+      return acc + BigInt(e.result as bigint);
     }, 0n);
   }, [balances]);
 
