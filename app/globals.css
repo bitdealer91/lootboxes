@@ -136,6 +136,23 @@ body::before {
   gap: 10px;
 }
 
+/* Icon buttons (used on mobile header) */
+.btn.icon-btn {
+  /* Default keeps normal button sizing; mobile overrides to square icon */
+  padding: 12px 18px;
+}
+.btn .btn-icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+.btn .btn-text {
+  display: inline;
+}
+.btn .btn-hide-mobile {
+  display: inline-flex;
+}
+
 .btn {
   position: relative;
   display: inline-flex;
@@ -852,11 +869,29 @@ input.neo-input[type="number"] {
 }
 
 @media (max-width: 640px) {
+  /* Keep header in one row on mobile and use compact icon buttons */
+  .nav { flex-direction: row; align-items: center; padding: 18px 18px 0; }
+  .nav-actions { margin-left: auto; }
+  .btn .btn-text { display: none; }
+  .btn .btn-hide-mobile { display: none; }
+  .btn.icon-btn { width: 44px; height: 44px; padding: 0; border-radius: 14px; }
+  .btn.icon-btn .btn-icon { width: 20px; height: 20px; }
+
   .chest-stage { transform: translateY(var(--stage-offset-mobile)); }
   .chest-hit { transform: translate3d(0, var(--chest-offset-mobile), 0); --chest-anim-offset: var(--chest-offset-mobile); }
   .chest-hit.is-idle:hover { animation: vibrate-fixed 0.22s linear infinite; transform: translate3d(0, var(--chest-anim-offset), 0) scale(1.03); }
   .chest-hit.is-idle:active { transform: translate3d(0, var(--chest-anim-offset), 0) scale(0.98); }
-  .cta-stack { margin-top: clamp(-220px, -28vh, -120px); }
+  /* Move primary CTA near bottom (above social icons) */
+  .cta-stack {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 84px;
+    margin-top: 0;
+    padding: 0 18px;
+    z-index: 11;
+  }
+  .cta-stack .btn.xl { width: 100%; max-width: 420px; }
 }
 
 

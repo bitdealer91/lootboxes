@@ -1014,13 +1014,24 @@ export default function LootboxPage() {
           </div>
         </div>
         <div className="nav-actions">
-          <button className="btn ghost" onClick={beginMixFlow} disabled={!isConnected || !isCorrectChain || !isMixerConfigured}>
-            Mixer
+          <button
+            className="btn ghost icon-btn"
+            onClick={beginMixFlow}
+            disabled={!isConnected || !isCorrectChain || !isMixerConfigured}
+            aria-label="Mixer"
+          >
+            <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M7 7h14v2H7l2.2 2.2-1.4 1.4L3 8l4.8-4.6 1.4 1.4L7 7zm10 10H3v-2h14l-2.2-2.2 1.4-1.4L21 16l-4.8 4.6-1.4-1.4L17 17z"
+                fill="currentColor"
+              />
+            </svg>
+            <span className="btn-text">Mixer</span>
           </button>
           <div style={{ position: "relative" }}>
             <button
               ref={accountBtnRef}
-              className="btn ghost"
+              className="btn ghost icon-btn"
               onClick={() => {
                 if (!uiConnected) {
                   appKit?.open();
@@ -1028,14 +1039,27 @@ export default function LootboxPage() {
                 }
                 setAccountMenuOpen((v) => !v);
               }}
+              aria-label={uiConnected ? "Account menu" : "Connect wallet"}
             >
-              <span className={`key-chip ${uiConnected ? "is-visible" : "is-hidden"}`} suppressHydrationWarning>
+              <svg className="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M4.5 7.5A3.5 3.5 0 0 1 8 4h10a2 2 0 0 1 2 2v2h-8.2a3.8 3.8 0 0 0 0 7.6H20V18a2 2 0 0 1-2 2H8a3.5 3.5 0 0 1-3.5-3.5v-9zM20 10.2h-8.2a1.8 1.8 0 1 0 0 3.6H20v-3.6z"
+                  fill="currentColor"
+                />
+              </svg>
+              <span className={`key-chip btn-hide-mobile ${uiConnected ? "is-visible" : "is-hidden"}`} suppressHydrationWarning>
                 {uiConnected ? `${keysDisplay} lootbox keys` : ""}
               </span>
-              <span className={`key-chip ${uiConnected ? "is-visible" : "is-hidden"}`} style={{ marginLeft: 8 }} suppressHydrationWarning>
+              <span
+                className={`key-chip btn-hide-mobile ${uiConnected ? "is-visible" : "is-hidden"}`}
+                style={{ marginLeft: 8 }}
+                suppressHydrationWarning
+              >
                 {uiConnected ? `${inputKeysDisplay} input keys` : ""}
               </span>
-              <span className="account-label" suppressHydrationWarning>{accountLabel}</span>
+              <span className="account-label btn-hide-mobile" suppressHydrationWarning>
+                {accountLabel}
+              </span>
             </button>
             {uiConnected && accountMenuOpen && (
               <div
@@ -1428,6 +1452,8 @@ export default function LootboxPage() {
     </div>
   );
 }
+
+
 
 
 

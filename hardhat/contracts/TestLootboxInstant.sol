@@ -43,6 +43,8 @@ contract TestLootboxInstant is Ownable, Pausable, ReentrancyGuard {
     event OpenRequested(address indexed user, uint256 requestId);
     event ItemAwarded(address indexed user, uint8 itemType, address token, uint256 id, uint256 amount);
     event PointsAwarded(address indexed user, uint256 amount, uint256 newTotal);
+    event SweptNative(address indexed to, uint256 amount);
+    event SweptErc20(address indexed token, address indexed to, uint256 amount);
 
     IERC1155BurnableKeys public immutable keys;
 
@@ -187,5 +189,32 @@ contract TestLootboxInstant is Ownable, Pausable, ReentrancyGuard {
             IRewardVaultERC721(nftVault).dispense(msg.sender);
         }
     }
+
+    /// @notice Admin-only recovery of leftover native balance.
+    /// @dev Restricted to paused state to avoid surprise withdrawals during operation.
+    function sweepNative(address payable to, uint256 amount) external onlyOwner nonReentrant whenPaused {
+        require(to != address(0), "TO_0");
+        uint256 bal = address(this).balance;
+        if (amount == 0) amount = bal;
+        require(amount <= bal, "INSUFFICIENT");
+        (bool ok,) = to.call{value: amount}("");
+        require(ok, "SEND_FAIL");
+        emit SweptNative(to, amount);
+    }
+
+    /// @notice Admin-only recovery of leftover ERC20 balance (if ever used).
+    /// @dev Restricted to paused state to avoid surprise withdrawals during operation.
+    function sweepErc20(address token, address to, uint256 amount) external onlyOwner nonReentrant whenPaused {
+        require(token != address(0), "TOKEN_0");
+        require(to != address(0), "TO_0");
+        IERC20 erc20 = IERC20(token);
+        uint256 bal = erc20.balanceOf(address(this));
+        if (amount == 0) amount = bal;
+        require(amount <= bal, "INSUFFICIENT");
+        erc20.safeTransfer(to, amount);
+        emit SweptErc20(token, to, amount);
+    }
 }
+
+
 

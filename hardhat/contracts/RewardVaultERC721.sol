@@ -21,6 +21,7 @@ contract RewardVaultERC721 is Ownable, IERC721Receiver {
     event LootboxSet(address indexed lootbox);
     event Deposited(address indexed from, uint256 indexed tokenId);
     event Dispensed(address indexed to, uint256 indexed tokenId);
+    event Withdrawn(address indexed to, uint256 indexed tokenId);
 
     constructor(address nft_) Ownable(msg.sender) {
         require(nft_ != address(0), "NFT_0");
@@ -47,6 +48,20 @@ contract RewardVaultERC721 is Ownable, IERC721Receiver {
         return queue.length - cursor;
     }
 
+    /// @notice Admin-only recovery of leftover NFTs (not yet dispensed).
+    /// @dev Moves up to `maxCount` NFTs from the remaining queue to `to` and advances the cursor,
+    ///      so future `dispense()` continues to work.
+    function withdrawRemaining(address to, uint256 maxCount) external onlyOwner {
+        require(to != address(0), "TO_0");
+        uint256 left = queue.length - cursor;
+        if (maxCount == 0 || maxCount > left) maxCount = left;
+        for (uint256 i = 0; i < maxCount; i++) {
+            uint256 tokenId = queue[cursor++];
+            nft.safeTransferFrom(address(this), to, tokenId);
+            emit Withdrawn(to, tokenId);
+        }
+    }
+
     /// @notice Dispense next NFT to winner. Only lootbox can call.
     function dispense(address to) external returns (uint256 tokenId) {
         if (msg.sender != lootbox) revert NotLootbox();
@@ -60,5 +75,7 @@ contract RewardVaultERC721 is Ownable, IERC721Receiver {
         return this.onERC721Received.selector;
     }
 }
+
+
 
 
