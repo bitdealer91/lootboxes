@@ -876,6 +876,11 @@ input.neo-input[type="number"] {
   .btn .btn-hide-mobile { display: none; }
   .btn.icon-btn { width: 44px; height: 44px; padding: 0; border-radius: 14px; }
   .btn.icon-btn .btn-icon { width: 20px; height: 20px; }
+  /* Prevent headline wrapping (e.g. Samsung browser) */
+  .microcopy h1 {
+    white-space: nowrap;
+    font-size: clamp(30px, 9vw, 46px);
+  }
 
   /*
     Keep the original layout flow (prevents headline/spacing shifts),
