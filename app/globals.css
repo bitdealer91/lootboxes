@@ -16,10 +16,9 @@
   --btn-glow: 0 0 24px rgba(123, 91, 255, 0.45), 0 0 48px rgba(255, 63, 180, 0.28);
   --btn-border: rgba(255, 255, 255, 0.18);
   --stage-offset: -140px;
-  /* Mobile: move chest stage lower onto the platform */
-  --stage-offset-mobile: -20px;
+  --stage-offset-mobile: -100px;
   --chest-offset: -125px;
-  --chest-offset-mobile: -10px;
+  --chest-offset-mobile: -80px;
 }
 
 * { box-sizing: border-box; }
@@ -878,16 +877,16 @@ input.neo-input[type="number"] {
   .btn.icon-btn { width: 44px; height: 44px; padding: 0; border-radius: 14px; }
   .btn.icon-btn .btn-icon { width: 20px; height: 20px; }
 
-  /* Anchor lootbox to the platform across mobile browsers */
-  .chest-stage {
-    position: fixed;
-    left: 50%;
-    /* place the stage above CTA + social icons; use svh so address-bar changes don't shift it */
-    bottom: calc(clamp(160px, 22svh, 230px) + env(safe-area-inset-bottom, 0px));
-    transform: translateX(-50%);
-    margin: 0;
+  /*
+    Keep the original layout flow (prevents headline/spacing shifts),
+    but make the vertical alignment more consistent across mobile browsers
+    by using svh-based clamps instead of a single px offset.
+  */
+  .chest-stage { transform: translateY(calc(-1 * clamp(40px, 7svh, 90px))); }
+  .chest-hit {
+    transform: translate3d(0, calc(-1 * clamp(20px, 5svh, 70px)), 0);
+    --chest-anim-offset: calc(-1 * clamp(20px, 5svh, 70px));
   }
-  .chest-hit { transform: translate3d(0, 0, 0); --chest-anim-offset: 0px; }
   .chest-hit.is-idle:hover { animation: vibrate-fixed 0.22s linear infinite; transform: translate3d(0, var(--chest-anim-offset), 0) scale(1.03); }
   .chest-hit.is-idle:active { transform: translate3d(0, var(--chest-anim-offset), 0) scale(0.98); }
   /* Move primary CTA near bottom (above social icons) */
