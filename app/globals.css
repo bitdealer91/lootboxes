@@ -17,9 +17,9 @@
   --btn-border: rgba(255, 255, 255, 0.18);
   --stage-offset: -140px;
   /* Mobile: move chest stage lower onto the platform */
-  --stage-offset-mobile: -60px;
+  --stage-offset-mobile: -20px;
   --chest-offset: -125px;
-  --chest-offset-mobile: -40px;
+  --chest-offset-mobile: -10px;
 }
 
 * { box-sizing: border-box; }
