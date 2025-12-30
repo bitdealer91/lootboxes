@@ -647,7 +647,7 @@ input.neo-input[type="number"] {
 .corner-icons {
   position: fixed;
   right: 26px;
-  bottom: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   display: flex;
   gap: 12px;
   z-index: 10;
@@ -878,8 +878,16 @@ input.neo-input[type="number"] {
   .btn.icon-btn { width: 44px; height: 44px; padding: 0; border-radius: 14px; }
   .btn.icon-btn .btn-icon { width: 20px; height: 20px; }
 
-  .chest-stage { transform: translateY(var(--stage-offset-mobile)); }
-  .chest-hit { transform: translate3d(0, var(--chest-offset-mobile), 0); --chest-anim-offset: var(--chest-offset-mobile); }
+  /* Anchor lootbox to the platform across mobile browsers */
+  .chest-stage {
+    position: fixed;
+    left: 50%;
+    /* place the stage above CTA + social icons; use svh so address-bar changes don't shift it */
+    bottom: calc(clamp(160px, 22svh, 230px) + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    margin: 0;
+  }
+  .chest-hit { transform: translate3d(0, 0, 0); --chest-anim-offset: 0px; }
   .chest-hit.is-idle:hover { animation: vibrate-fixed 0.22s linear infinite; transform: translate3d(0, var(--chest-anim-offset), 0) scale(1.03); }
   .chest-hit.is-idle:active { transform: translate3d(0, var(--chest-anim-offset), 0) scale(0.98); }
   /* Move primary CTA near bottom (above social icons) */
@@ -887,7 +895,7 @@ input.neo-input[type="number"] {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 84px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
     margin-top: 0;
     padding: 0 18px;
     z-index: 11;
