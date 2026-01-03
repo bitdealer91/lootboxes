@@ -665,6 +665,8 @@ export default function LootboxPage() {
         return;
       }
       pushTxToast("Lootbox opened", hash);
+      // Refresh lootbox key balances so "Open another box" can be accurate.
+      await refetchLootboxKeyBalances?.();
       const fromBlock = receipt.blockNumber;
 
       // If ItemAwarded is emitted in the same tx, decode it.
@@ -885,22 +887,34 @@ export default function LootboxPage() {
     const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
     if (typeof window !== "undefined") {
       window.open(tweetUrl, "_blank", "noopener,noreferrer");
-      // Close the reward UI completely after sharing (do not re-show on other UI actions).
-      setRewardVisible(false);
-      setRewardDone(false);
-      setPendingItemType(null);
-      setLastWin(null);
-      setChestDone(false);
-      setOpening(false);
-      if (rewardRef.current) {
-        try {
-          rewardRef.current.pause();
-          rewardRef.current.currentTime = 0;
-        } catch {
-          // noop
-        }
+      closeRewardUI();
+    }
+  }
+
+  function closeRewardUI() {
+    // Close the reward UI completely (do not re-show on other UI actions).
+    setRewardVisible(false);
+    setRewardDone(false);
+    setPendingItemType(null);
+    setLastWin(null);
+    setChestDone(false);
+    setOpening(false);
+    setFireworksVisible(false);
+    if (rewardRef.current) {
+      try {
+        rewardRef.current.pause();
+        rewardRef.current.currentTime = 0;
+      } catch {
+        // noop
       }
     }
+  }
+
+  function openAnotherBox() {
+    if (!canOpen) return;
+    closeRewardUI();
+    // Open modal on next tick to avoid UI overlap.
+    window.setTimeout(() => beginOpenFlow(), 0);
   }
 
   async function claimReward(entry: RewardEntry) {
@@ -1227,9 +1241,16 @@ export default function LootboxPage() {
           />
           {rewardDone && (
             <div className="reward-dismiss">
-              <button className="btn ghost" onClick={shareOnX}>
-                Share on X
-              </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+                <button className="btn ghost" onClick={shareOnX}>
+                  Share on X
+                </button>
+                {canOpen && (
+                  <button className="btn primary" onClick={openAnotherBox}>
+                    Open another box
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
