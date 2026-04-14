@@ -61,7 +61,8 @@ const mixerAbi = parseAbi(["function mixERC1155(uint256 recipeId, uint256[] ids,
 const lootboxClaimsAbi = parseAbi([
   "function claimErc20(address token) external",
   "function claimErc721(address nft, uint256 maxCount) external",
-  "function claimNative() external"
+  "function claimNative() external",
+  "function claimableErc721(address user, address nftVault) view returns (uint256)"
 ]);
 function buildShareText(itemType: number): string {
   switch (itemType) {
@@ -136,6 +137,7 @@ export default function LootboxPage() {
   };
   const [rewardHistory, setRewardHistory] = useState<RewardEntry[]>([]);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
+  const [nftClaimableByVault, setNftClaimableByVault] = useState<Record<string, bigint>>({});
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   function txUrl(hash: `0x${string}`) {
@@ -356,6 +358,45 @@ export default function LootboxPage() {
       // ignore
     }
   }, [rewardHistory, rewardsStorageKey]);
+
+  // Keep claim buttons in sync with on-chain claimable counters for NFT vault rewards.
+  useEffect(() => {
+    if (!showRewardsModal) return;
+    if (!uiAddress || !publicClient) return;
+    const nftVaults = Array.from(
+      new Set(
+        rewardHistory
+          .filter((r) => r.itemType === 0 && !!r.token)
+          .map((r) => (r.token as `0x${string}`).toLowerCase())
+      )
+    ) as `0x${string}`[];
+    if (!nftVaults.length) return;
+
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        nftVaults.map(async (vault) => {
+          try {
+            const value = (await publicClient.readContract({
+              address: LOOTBOX,
+              abi: lootboxClaimsAbi,
+              functionName: "claimableErc721",
+              args: [uiAddress, vault]
+            })) as bigint;
+            return [vault.toLowerCase(), value] as const;
+          } catch {
+            return [vault.toLowerCase(), 0n] as const;
+          }
+        })
+      );
+      if (cancelled) return;
+      setNftClaimableByVault(Object.fromEntries(entries));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showRewardsModal, uiAddress, publicClient, rewardHistory]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
@@ -890,6 +931,10 @@ export default function LootboxPage() {
         await publicClient.waitForTransactionReceipt({ hash: txHash });
         pushTxToast("Reward claimed", txHash);
         setRewardHistory((prev) => prev.map((r) => (r.id === entry.id ? { ...r, claimed: true } : r)));
+        setNftClaimableByVault((prev) => ({
+          ...prev,
+          [entry.token!.toLowerCase()]: 0n
+        }));
       }
     } catch {
       // noop (wallet will show the error)
@@ -1280,7 +1325,9 @@ export default function LootboxPage() {
                 {rewardHistory.map((r) => {
                   const title = formatPrizeTitle(r.itemType);
                   const isNoWin = r.itemType === 255;
-                  const claimable = r.itemType === 0;
+                  const onchainNftClaimable =
+                    r.itemType === 0 && r.token ? nftClaimableByVault[r.token.toLowerCase()] : undefined;
+                  const claimable = r.itemType === 0 && (onchainNftClaimable === undefined || onchainNftClaimable > 0n);
                   const isClaimed = !!r.claimed;
                   return (
                     <div
