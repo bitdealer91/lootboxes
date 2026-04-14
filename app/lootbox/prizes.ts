@@ -20,33 +20,33 @@ export const PRIZES_BY_ITEM_TYPE: Record<number, LootboxPrize> = {
   },
   1: {
     itemType: 1,
-    title: "30 SOMI",
-    description: "Token reward",
-    videoSrc: "/assets/30somi.webm"
+    title: "500 Points",
+    description: "Points reward",
+    videoSrc: "/assets/500points.webm"
   },
   2: {
     itemType: 2,
-    title: "50 SOMI",
-    description: "Token reward",
-    videoSrc: "/assets/50somi.webm"
+    title: "750 Points",
+    description: "Points reward",
+    videoSrc: "/assets/750points.webm"
   },
   3: {
     itemType: 3,
-    title: "75 SOMI",
-    description: "Token reward",
-    videoSrc: "/assets/75somi.webm"
+    title: "1000 Points",
+    description: "Points reward",
+    videoSrc: "/assets/1000points.webm"
   },
   4: {
     itemType: 4,
-    title: "200 SOMI",
-    description: "Token reward",
-    videoSrc: "/assets/200somi.webm"
+    title: "1200 Points",
+    description: "Points reward",
+    videoSrc: "/assets/1200points.webm"
   },
-  5: { itemType: 5, title: "750 Points for S5", description: "Points reward", videoSrc: "/assets/750points.webm" },
-  6: { itemType: 6, title: "1000 Points", description: "Points reward", videoSrc: "/assets/1000points.webm" },
-  7: { itemType: 7, title: "1500 Points", description: "Points reward", videoSrc: "/assets/1500points.webm" },
-  8: { itemType: 8, title: "1750 Points", description: "Points reward", videoSrc: "/assets/1750points.webm" },
-  9: { itemType: 9, title: "2000 Points", description: "Points reward", videoSrc: "/assets/2000points.webm" }
+  5: { itemType: 5, title: "1500 Points", description: "Points reward", videoSrc: "/assets/1500points.webm" },
+  6: { itemType: 6, title: "2000 Points", description: "Points reward", videoSrc: "/assets/2000points.webm" },
+  7: { itemType: 7, title: "Unused slot", description: "Not configured", videoSrc: "/assets/card01.webm" },
+  8: { itemType: 8, title: "Unused slot", description: "Not configured", videoSrc: "/assets/card01.webm" },
+  9: { itemType: 9, title: "Unused slot", description: "Not configured", videoSrc: "/assets/card01.webm" }
 };
 
 export function formatPrizeTitle(itemType: number): string {

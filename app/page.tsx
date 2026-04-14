@@ -68,22 +68,16 @@ function buildShareText(itemType: number): string {
     case 0:
       return "Luck was on my side—just pulled a Quills NFT from the Somnia Lootbox. #Somnia #Lootbox #Web3";
     case 1:
-      return "Just pulled 30 SOMI from the Somnia Lootbox. #Somnia #Lootbox #Web3";
+      return "Just pulled 500 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
     case 2:
-      return "Just pulled 50 SOMI from the Somnia Lootbox. #Somnia #Lootbox #Web3";
+      return "Just pulled 750 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
     case 3:
-      return "Just pulled 75 SOMI from the Somnia Lootbox. #Somnia #Lootbox #Web3";
-    case 4:
-      return "Just pulled 200 SOMI from the Somnia Lootbox. #Somnia #Lootbox #Web3";
-    case 5:
-      return "Just pulled 750 Points for S5 from the Somnia Lootbox. #Somnia #Lootbox #Web3";
-    case 6:
       return "Just pulled 1000 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
-    case 7:
+    case 4:
+      return "Just pulled 1200 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
+    case 5:
       return "Just pulled 1500 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
-    case 8:
-      return "Just pulled 1750 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
-    case 9:
+    case 6:
       return "Just pulled 2000 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
     default:
       return "Just opened the Somnia Lootbox. #Somnia #Lootbox #Web3";
@@ -885,41 +879,6 @@ export default function LootboxPage() {
     if (!isCorrectChain) return;
     try {
       setClaimingRewardId(entry.id);
-      if (entry.itemType === 1 || entry.itemType === 2 || entry.itemType === 3 || entry.itemType === 4) {
-        const isNative = !entry.token || entry.token === "0x0000000000000000000000000000000000000000";
-        const txHash = isNative
-          ? await writeContractAsync({
-              address: LOOTBOX,
-              abi: lootboxClaimsAbi,
-              functionName: "claimNative",
-              args: []
-            })
-          : await writeContractAsync({
-              address: LOOTBOX,
-              abi: lootboxClaimsAbi,
-              functionName: "claimErc20",
-              args: [entry.token as `0x${string}`]
-            });
-        await publicClient.waitForTransactionReceipt({ hash: txHash });
-        pushTxToast("Reward claimed", txHash);
-        setRewardHistory((prev) => {
-          // For native: claimNative empties all native claimables; for ERC20: empties by token.
-          if (isNative) {
-            return prev.map((r) =>
-              (r.itemType === 1 || r.itemType === 2 || r.itemType === 3 || r.itemType === 4) &&
-              (!r.token || r.token === "0x0000000000000000000000000000000000000000")
-                ? { ...r, claimed: true }
-                : r
-            );
-          }
-          return prev.map((r) =>
-            (r.itemType === 1 || r.itemType === 2 || r.itemType === 3 || r.itemType === 4) &&
-            r.token?.toLowerCase() === entry.token?.toLowerCase()
-              ? { ...r, claimed: true }
-              : r
-          );
-        });
-      }
       if (entry.itemType === 0) {
         if (!entry.token || entry.token === "0x0000000000000000000000000000000000000000") return;
         const txHash = await writeContractAsync({
@@ -1321,12 +1280,7 @@ export default function LootboxPage() {
                 {rewardHistory.map((r) => {
                   const title = formatPrizeTitle(r.itemType);
                   const isNoWin = r.itemType === 255;
-                  const claimable =
-                    r.itemType === 0 ||
-                    r.itemType === 1 ||
-                    r.itemType === 2 ||
-                    r.itemType === 3 ||
-                    r.itemType === 4;
+                  const claimable = r.itemType === 0;
                   const isClaimed = !!r.claimed;
                   return (
                     <div
