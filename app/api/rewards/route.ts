@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { Redis } from "@upstash/redis";
-import { createPublicClient, http, isAddress, isHex, parseAbi, parseEventLogs } from "viem";
+import { createPublicClient, http, isAddress, isHex, type Hex } from "viem";
+import {
+  itemEntriesForUser,
+  parseLootboxLogs,
+  pointsAccrualsForUser
+} from "@/lib/rewards-indexing";
 
 export const runtime = "nodejs";
-
-const lootboxAbi = parseAbi([
-  "event ItemAwarded(address indexed user, uint8 itemType, address token, uint256 id, uint256 amount)",
-  "event PointsAwarded(address indexed user, uint256 amount, uint256 newTotal)"
-]);
 
 type RewardEntry = {
   id: string;
@@ -32,10 +32,6 @@ function keyFor(address: string, chainId: number, lootbox: string) {
   return `lootboxes:rewards:${chainId}:${address.toLowerCase()}:${lootbox.toLowerCase()}`;
 }
 
-function seenKeyFor(chainId: number, lootbox: string) {
-  return `lootboxes:rewards:seen:${chainId}:${lootbox.toLowerCase()}`;
-}
-
 function pointsKeyFor(address: string, chainId: number, lootbox: string) {
   return `lootboxes:points:${chainId}:${address.toLowerCase()}:${lootbox.toLowerCase()}`;
 }
@@ -44,8 +40,16 @@ function pointsEventsKeyFor(address: string, chainId: number, lootbox: string) {
   return `lootboxes:points:events:${chainId}:${address.toLowerCase()}:${lootbox.toLowerCase()}`;
 }
 
+function pointsSeenSetFor(chainId: number, lootbox: string) {
+  return `lootboxes:points:seen:${chainId}:${lootbox.toLowerCase()}`;
+}
+
+function itemSeenSetFor(chainId: number, lootbox: string) {
+  return `lootboxes:rewards:itemseen:${chainId}:${lootbox.toLowerCase()}`;
+}
+
 function getRpcUrl() {
-  return process.env.RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || process.env.SOMNIA_TEST_RPC_URL || "";
+  return process.env.RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || "";
 }
 
 export async function GET(req: Request) {
@@ -95,7 +99,7 @@ export async function POST(req: Request) {
   const address = body?.address || "";
   const lootbox = body?.lootbox || "";
   const chainId = Number(body?.chainId || 0);
-  const txHash = body?.txHash || "";
+  const txHash = (body?.txHash || "") as Hex;
 
   if (!isAddress(address)) return NextResponse.json({ error: "Bad address" }, { status: 400 });
   if (!isAddress(lootbox)) return NextResponse.json({ error: "Bad lootbox" }, { status: 400 });
@@ -106,76 +110,81 @@ export async function POST(req: Request) {
   if (!rpcUrl) return NextResponse.json({ error: "RPC_URL not configured" }, { status: 500 });
 
   const publicClient = createPublicClient({ transport: http(rpcUrl) });
+  const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+  const lootboxHex = lootbox as Hex;
+  const parsed = parseLootboxLogs(lootboxHex, receipt.logs);
 
-  // Verify on-chain: tx contains ItemAwarded for this user emitted by this lootbox.
-  const receipt = await publicClient.getTransactionReceipt({ hash: txHash as `0x${string}` });
-
-  const logs = receipt.logs.filter((l) => l.address.toLowerCase() === lootbox.toLowerCase());
-  const decoded = parseEventLogs({ abi: lootboxAbi, logs });
-  const awarded = decoded.find(
-    (e) => e.eventName === "ItemAwarded" && (e.args as { user?: string }).user?.toLowerCase() === address.toLowerCase()
-  );
-  const pointsAwarded = decoded.find(
-    (e) => e.eventName === "PointsAwarded" && (e.args as { user?: string }).user?.toLowerCase() === address.toLowerCase()
+  const addrLc = address.toLowerCase();
+  const hasAward = parsed.some(
+    (e) =>
+      (e.eventName === "ItemAwarded" && e.args.user.toLowerCase() === addrLc) ||
+      (e.eventName === "PointsAwarded" && e.args.user.toLowerCase() === addrLc)
   );
 
-  if (!awarded) {
-    return NextResponse.json({ error: "No ItemAwarded for this user/lootbox" }, { status: 400 });
+  if (!hasAward) {
+    return NextResponse.json({ error: "No ItemAwarded/PointsAwarded for this user and lootbox" }, { status: 400 });
   }
 
-  const args = awarded.args as { itemType: number; token: `0x${string}`; amount: bigint };
-  const itemType = Number(args.itemType);
-  const isPoints = itemType >= 5 && itemType <= 9;
+  const pointsSeen = pointsSeenSetFor(chainId, lootbox);
+  const itemSeen = itemSeenSetFor(chainId, lootbox);
 
-  let pointsTotal: string | undefined;
-  if (isPoints && pointsAwarded) {
-    const p = pointsAwarded.args as { amount: bigint; newTotal: bigint };
-    pointsTotal = (p.newTotal ?? 0n).toString();
-  }
-  const item: RewardEntry = {
-    id: `${Date.now()}-${txHash}`,
-    chainId,
-    lootbox: lootbox as `0x${string}`,
-    txHash: txHash as `0x${string}`,
-    itemType,
-    token: args.token,
-    amount: (args.amount ?? 0n).toString(),
-    pointsTotal,
-    createdAt: Date.now()
-  };
-
+  let pointsNewEvents = 0;
+  let itemsNew = 0;
+  const createdAt = Date.now();
   const listKey = keyFor(address, chainId, lootbox);
-  const seenKey = seenKeyFor(chainId, lootbox);
+  const pk = pointsKeyFor(address, chainId, lootbox);
+  const ek = pointsEventsKeyFor(address, chainId, lootbox);
 
-  // Dedupe by txHash globally per (chainId, lootbox)
-  const added = await redis.sadd(seenKey, txHash);
-  if (added === 0) {
-    return NextResponse.json({ ok: true, deduped: true });
-  }
-
-  await redis.lpush(listKey, item);
-  await redis.ltrim(listKey, 0, 199);
-
-  // Also persist points totals for quest platform (optional use)
-  if (isPoints && pointsTotal !== undefined) {
-    const pk = pointsKeyFor(address, chainId, lootbox);
-    const ek = pointsEventsKeyFor(address, chainId, lootbox);
-    await redis.set(pk, pointsTotal);
+  // Chain-anchored points: each PointsAwarded carries authoritative `newTotal`. Idempotent per log.
+  const accruals = pointsAccrualsForUser(parsed, address, txHash);
+  let lastPointsTotal: string | undefined;
+  for (const a of accruals) {
+    const added = await redis.sadd(pointsSeen, a.eventId);
+    if (added === 0) continue;
+    pointsNewEvents += 1;
+    lastPointsTotal = a.newTotal.toString();
+    await redis.set(pk, lastPointsTotal);
     await redis.lpush(ek, {
       txHash,
       chainId,
       lootbox,
       address,
-      itemType,
-      amount: item.amount,
-      newTotal: pointsTotal,
-      createdAt: item.createdAt
+      amount: a.amount.toString(),
+      newTotal: lastPointsTotal,
+      logIndex: a.logIndex,
+      createdAt
     });
     await redis.ltrim(ek, 0, 199);
   }
 
-  return NextResponse.json({ ok: true, item });
+  const pointsTotalForItems = accruals.length ? accruals[accruals.length - 1]!.newTotal.toString() : undefined;
+
+  for (const row of itemEntriesForUser(parsed, address, txHash, chainId, lootboxHex)) {
+    const added = await redis.sadd(itemSeen, row.eventId);
+    if (added === 0) continue;
+    itemsNew += 1;
+    const item: RewardEntry = {
+      id: `${row.logIndex}-${txHash}`,
+      chainId: row.chainId,
+      lootbox: row.lootbox as `0x${string}`,
+      txHash: row.txHash as `0x${string}`,
+      itemType: row.itemType,
+      token: row.token,
+      amount: row.amount.toString(),
+      pointsTotal: pointsTotalForItems,
+      createdAt
+    };
+    await redis.lpush(listKey, item);
+    await redis.ltrim(listKey, 0, 199);
+  }
+
+  if (pointsNewEvents === 0 && itemsNew === 0) {
+    return NextResponse.json({ ok: true, deduped: true });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    indexed: { pointsEvents: pointsNewEvents, items: itemsNew },
+    lastPointsTotal: lastPointsTotal ?? null
+  });
 }
-
-
-

@@ -11,14 +11,22 @@ contract RewardVaultERC721 is Ownable, IERC721Receiver {
     IERC721 public immutable nft;
 
     address public lootbox;
+    bool public lootboxLocked;
 
     uint256[] public queue;
     uint256 public cursor;
+    /// @dev Tracks tokenIds that are currently in the queue (not yet dispensed/withdrawn).
+    mapping(uint256 => bool) public inQueue;
 
     error NotLootbox();
     error Empty();
+    error AlreadyQueued();
+    error NotUntracked();
+    error LootboxLocked();
+    error LootboxUnset();
 
     event LootboxSet(address indexed lootbox);
+    event LootboxLockedEvent();
     event Deposited(address indexed from, uint256 indexed tokenId);
     event Dispensed(address indexed to, uint256 indexed tokenId);
     event Withdrawn(address indexed to, uint256 indexed tokenId);
@@ -28,9 +36,19 @@ contract RewardVaultERC721 is Ownable, IERC721Receiver {
         nft = IERC721(nft_);
     }
 
+    /// @notice Wire the lootbox that may call `dispense`. Callable until `lockLootbox()`.
     function setLootbox(address lootbox_) external onlyOwner {
+        require(lootbox_ != address(0), "LB_0");
+        if (lootboxLocked) revert LootboxLocked();
         lootbox = lootbox_;
         emit LootboxSet(lootbox_);
+    }
+
+    /// @notice Permanently prevent changing `lootbox` (recommended after mainnet wiring).
+    function lockLootbox() external onlyOwner {
+        if (lootbox == address(0)) revert LootboxUnset();
+        lootboxLocked = true;
+        emit LootboxLockedEvent();
     }
 
     /// @notice Deposit specific tokenIds into the vault.
@@ -38,8 +56,10 @@ contract RewardVaultERC721 is Ownable, IERC721Receiver {
     function deposit(uint256[] calldata tokenIds) external {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             uint256 tokenId = tokenIds[i];
+            if (inQueue[tokenId]) revert AlreadyQueued();
             nft.safeTransferFrom(msg.sender, address(this), tokenId);
             queue.push(tokenId);
+            inQueue[tokenId] = true;
             emit Deposited(msg.sender, tokenId);
         }
     }
@@ -57,9 +77,19 @@ contract RewardVaultERC721 is Ownable, IERC721Receiver {
         if (maxCount == 0 || maxCount > left) maxCount = left;
         for (uint256 i = 0; i < maxCount; i++) {
             uint256 tokenId = queue[cursor++];
+            inQueue[tokenId] = false;
             nft.safeTransferFrom(address(this), to, tokenId);
             emit Withdrawn(to, tokenId);
         }
+    }
+
+    /// @notice Admin-only rescue for NFTs that were transferred to this vault directly (not via `deposit()`).
+    /// @dev These tokenIds are not in the queue, so they would otherwise be stuck from the reward flow.
+    function rescueUntracked(address to, uint256 tokenId) external onlyOwner {
+        require(to != address(0), "TO_0");
+        if (inQueue[tokenId]) revert NotUntracked();
+        require(nft.ownerOf(tokenId) == address(this), "NOT_OWNED");
+        nft.safeTransferFrom(address(this), to, tokenId);
     }
 
     /// @notice Dispense next NFT to winner. Only lootbox can call.
@@ -67,6 +97,7 @@ contract RewardVaultERC721 is Ownable, IERC721Receiver {
         if (msg.sender != lootbox) revert NotLootbox();
         if (cursor >= queue.length) revert Empty();
         tokenId = queue[cursor++];
+        inQueue[tokenId] = false;
         nft.safeTransferFrom(address(this), to, tokenId);
         emit Dispensed(to, tokenId);
     }
@@ -75,7 +106,3 @@ contract RewardVaultERC721 is Ownable, IERC721Receiver {
         return this.onERC721Received.selector;
     }
 }
-
-
-
-

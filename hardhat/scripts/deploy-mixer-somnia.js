@@ -33,8 +33,6 @@ async function main() {
   console.log("Network:", hre.network.name, "chainId:", net.chainId.toString());
   console.log("Deployer:", deployer.address);
 
-  const burnSink = (process.env.BURN_SINK || "0x000000000000000000000000000000000000dEaD").toLowerCase();
-
   const LootboxKey = await ethers.getContractFactory("LootboxKey");
   const lootboxKey = await LootboxKey.deploy("");
   await lootboxKey.waitForDeployment();
@@ -51,15 +49,15 @@ async function main() {
   await tx.wait();
   console.log("Granted MINTER_ROLE to Mixer");
 
-  // RecipeId 1: 100 any ids 1..8 from Odyssey => 1 LootboxKey id=1
+  // RecipeId 1: 32 distinct ids 1..8 from Odyssey => 1 LootboxKey id=1 (BURN keys on mix)
   tx = await mixer.setRecipe(1, {
     tokenType: 0, // ERC1155
     inputToken: odysseyKeys,
     minId: 1,
     maxId: 8,
-    requiredTotal: 100,
-    mode: 0, // ESCROW
-    consumeTo: burnSink, // send inputs directly to burn address (no withdraw trust)
+    requiredTotal: 32,
+    mode: 1, // BURN (requires Odyssey collection burnBatch + Mixer approval)
+    consumeTo: ethers.ZeroAddress,
     outputKey: await lootboxKey.getAddress(),
     outputKeyId: 1,
     outputAmount: 1,
@@ -79,7 +77,8 @@ async function main() {
     mixer: await mixer.getAddress(),
     lootboxKey: await lootboxKey.getAddress(),
     recipeId: 1,
-    burnSink
+    mixMode: "BURN",
+    requiredTotal: 32
   }, null, 2));
 }
 

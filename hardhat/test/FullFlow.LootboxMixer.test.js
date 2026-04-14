@@ -1,5 +1,7 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import hre from "hardhat";
+
+const { ethers } = hre;
 import { decodeReceiptEvents } from "./helpers.js";
 
 // End-to-end local flow:
@@ -109,7 +111,7 @@ describe("Full flow: Keys1155 -> Mixer -> LootboxKey -> Lootbox", function () {
 
     // Mix into lootbox key
     await mixer.connect(user).mixERC1155(1, [1, 2, 8], [30, 20, 50]);
-    expect(await lootboxKey.balanceOf(user.address, 1)).to.equal(1);
+    expect(await lootboxKey.balanceOf(user.address, 1)).to.equal(1n);
 
     // Approve lootbox to burn lootboxKey
     await lootboxKey.connect(user).setApprovalForAll(await lootbox.getAddress(), true);
@@ -131,7 +133,7 @@ describe("Full flow: Keys1155 -> Mixer -> LootboxKey -> Lootbox", function () {
     const somiBefore = await somi.balanceOf(user.address);
     await lootbox.connect(user).claimErc20(await somi.getAddress());
     const somiAfter = await somi.balanceOf(user.address);
-    expect(somiAfter).to.be.gt(somiBefore);
+    expect(somiAfter > somiBefore).to.equal(true);
 
     // Now mint MORE input keys, make MORE lootboxKeys, and guarantee that Quills (itemType 0) is awarded
     // by forcing randomness bucket 0.
@@ -139,7 +141,7 @@ describe("Full flow: Keys1155 -> Mixer -> LootboxKey -> Lootbox", function () {
     // mint 100 more input keys (all id1)
     for (let i = 0; i < 100; i++) await mintOne(1);
     await mixer.connect(user).mixERC1155(1, [1], [100]);
-    expect(await lootboxKey.balanceOf(user.address, 1)).to.equal(1); // spent 1 already, got 1 new
+    expect(await lootboxKey.balanceOf(user.address, 1)).to.equal(1n); // spent 1 already, got 1 new
 
     const openTx2 = await lootbox.connect(user).openWithKey(1);
     const openRc2 = await openTx2.wait();

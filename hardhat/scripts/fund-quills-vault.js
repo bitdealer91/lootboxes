@@ -3,13 +3,9 @@ const { ethers } = hre;
 
 // Fund RewardVaultERC721 with Quills NFTs.
 //
-// Usage (mock Quills with mint):
-// QUILLS_ADDRESS=0x... QUILLS_VAULT_ADDRESS=0x... COUNT=10 \
-//   npx hardhat run ./scripts/fund-quills-vault.js --network somniaTest
-//
 // Usage (deposit existing tokenIds from a real collection):
 // QUILLS_ADDRESS=0x... QUILLS_VAULT_ADDRESS=0x... TOKEN_IDS=123,456 \
-//   npx hardhat run ./scripts/fund-quills-vault.js --network somniaTest
+//   npx hardhat run ./scripts/fund-quills-vault.js --network somnia
 
 async function main() {
   await hre.run("compile");
@@ -25,31 +21,32 @@ async function main() {
   console.log("Quills:", quillsAddr);
   console.log("Vault:", vaultAddr);
 
-  const quills = await ethers.getContractAt("MockERC721", quillsAddr);
+  // Use a minimal ERC721 ABI (real mainnet collection is NOT MockERC721).
+  const quills = await ethers.getContractAt(
+    [
+      "function setApprovalForAll(address operator, bool approved) external",
+      "function isApprovedForAll(address owner, address operator) view returns (bool)"
+    ],
+    quillsAddr
+  );
   const vault = await ethers.getContractAt("RewardVaultERC721", vaultAddr);
 
   let tokenIds;
   const tokenIdsEnv = (process.env.TOKEN_IDS || "").trim();
-  if (tokenIdsEnv) {
-    tokenIds = tokenIdsEnv
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map((s) => BigInt(s));
+  if (!tokenIdsEnv) throw new Error("Set TOKEN_IDS=123,456 (comma-separated tokenIds) for mainnet deposits.");
+  tokenIds = tokenIdsEnv
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => BigInt(s));
+
+  const approved = await quills.isApprovedForAll(deployer.address, vaultAddr);
+  if (!approved) {
+    console.log("Approving vault…");
+    await (await quills.setApprovalForAll(vaultAddr, true)).wait();
   } else {
-    const count = Number.parseInt(process.env.COUNT || "5", 10);
-    if (!Number.isFinite(count) || count <= 0) throw new Error("COUNT must be a positive integer");
-
-    const start = await quills.nextId();
-    console.log("Minting", count, "Quills… (starting tokenId:", start.toString() + ")");
-    for (let i = 0; i < count; i++) {
-      await (await quills.mint(deployer.address)).wait();
-    }
-    tokenIds = Array.from({ length: count }, (_, i) => start + BigInt(i));
+    console.log("Vault already approved.");
   }
-
-  console.log("Approving vault…");
-  await (await quills.setApprovalForAll(vaultAddr, true)).wait();
 
   console.log("Depositing tokenIds:", tokenIds.map((x) => x.toString()).join(", "));
   await (await vault.deposit(tokenIds)).wait();

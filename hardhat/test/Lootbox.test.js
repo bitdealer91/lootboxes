@@ -1,5 +1,7 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import hre from "hardhat";
+
+const { ethers } = hre;
 import { decodeReceiptEvents, expectRevert } from "./helpers.js";
 
 const WEIGHTS = {
@@ -108,8 +110,8 @@ describe("Lootbox", function () {
     const rc0 = await tx0.wait();
     const ev0 = decodeReceiptEvents(rc0, lootbox.interface).find((e) => e.name === "ItemAwarded");
     expect(ev0.args.user).to.equal(user.address);
-    expect(ev0.args.itemType).to.equal(0);
-    expect(await lootbox.claimableErc721(user.address, await quills.getAddress())).to.equal(1);
+    expect(ev0.args.itemType).to.equal(0n);
+    expect(await lootbox.claimableErc721(user.address, await quills.getAddress())).to.equal(1n);
     const nftBalBefore = await quills.balanceOf(user.address);
     await lootbox.connect(user).claimErc721(await quills.getAddress(), 1);
     const nftBalAfter = await quills.balanceOf(user.address);
@@ -121,7 +123,7 @@ describe("Lootbox", function () {
     const rc1 = await tx1.wait();
     const ev1 = decodeReceiptEvents(rc1, lootbox.interface).find((e) => e.name === "ItemAwarded");
     expect(ev1.args.user).to.equal(user.address);
-    expect(ev1.args.itemType).to.equal(1);
+    expect(ev1.args.itemType).to.equal(1n);
     expect(ev1.args.token).to.equal(await somi.getAddress());
     expect(ev1.args.amount).to.equal(ethers.parseEther("100"));
     expect(await lootbox.claimableErc20(user.address, await somi.getAddress())).to.equal(ethers.parseEther("100"));
@@ -134,7 +136,7 @@ describe("Lootbox", function () {
     const rc2 = await tx2.wait();
     const ev2 = decodeReceiptEvents(rc2, lootbox.interface).find((e) => e.name === "ItemAwarded");
     expect(ev2.args.user).to.equal(user.address);
-    expect(ev2.args.itemType).to.equal(2);
+    expect(ev2.args.itemType).to.equal(2n);
     expect(ev2.args.token).to.equal(await somi.getAddress());
     expect(ev2.args.amount).to.equal(ethers.parseEther("10000"));
     await lootbox.connect(user).claimErc20(await somi.getAddress());
@@ -144,16 +146,16 @@ describe("Lootbox", function () {
     const rc3 = await tx3.wait();
     const ev3 = decodeReceiptEvents(rc3, lootbox.interface).find((e) => e.name === "ItemAwarded");
     expect(ev3.args.user).to.equal(user.address);
-    expect(ev3.args.itemType).to.equal(3);
-    expect(ev3.args.amount).to.equal(100);
+    expect(ev3.args.itemType).to.equal(3n);
+    expect(ev3.args.amount).to.equal(100n);
 
     // 4) whitelist
     const tx4 = await openAndFulfill(rForBucketStart(starts.item4));
     const rc4 = await tx4.wait();
     const ev4 = decodeReceiptEvents(rc4, lootbox.interface).find((e) => e.name === "ItemAwarded");
     expect(ev4.args.user).to.equal(user.address);
-    expect(ev4.args.itemType).to.equal(4);
-    expect(ev4.args.amount).to.equal(1);
+    expect(ev4.args.itemType).to.equal(4n);
+    expect(ev4.args.amount).to.equal(1n);
   });
 
   it("never awards an out-of-stock prize (removes it from the weighted selection)", async function () {
@@ -198,18 +200,18 @@ describe("Lootbox", function () {
     const rca = await txa.wait();
     const eva = decodeReceiptEvents(rca, lb.interface).find((e) => e.name === "ItemAwarded");
     expect(eva.args.user).to.equal(_user.address);
-    expect(eva.args.itemType).to.equal(0);
+    expect(eva.args.itemType).to.equal(0n);
 
     // Second time, item0 is out-of-stock, so even with r=0 it must pick the first available non-empty bucket (item1).
     const txb = await openAndFulfillPickItem0();
     const rcb = await txb.wait();
     const evb = decodeReceiptEvents(rcb, lb.interface).find((e) => e.name === "ItemAwarded");
     expect(evb.args.user).to.equal(_user.address);
-    expect(evb.args.itemType).to.equal(1);
+    expect(evb.args.itemType).to.equal(1n);
   });
 
-  it("reserves global supply so users never burn a key after sold-out", async function () {
-    const [deployer, user, rng] = await ethers.getSigners();
+  it("reserves global supply so another user cannot open when pending consumes last slot", async function () {
+    const [_d, user, userB, rng] = await ethers.getSigners();
 
     const Keys = await ethers.getContractFactory("MockERC1155Keys");
     const keys = await Keys.deploy();
@@ -224,13 +226,13 @@ describe("Lootbox", function () {
     await lb.setPrize(3, WEIGHTS.points, 1, 3, ethers.ZeroAddress, 0, 100);
     await lb.setPrize(4, WEIGHTS.whitelist, 0, 0, ethers.ZeroAddress, 0, 0);
 
-    await keys.mint(user.address, 1, 2);
+    await keys.mint(user.address, 1, 1);
+    await keys.mint(userB.address, 1, 1);
     await keys.connect(user).setApprovalForAll(await lb.getAddress(), true);
+    await keys.connect(userB).setApprovalForAll(await lb.getAddress(), true);
 
-    // First open ok
     await lb.connect(user).openWithKey(1);
-    // Second open must revert SoldOut because remainingTotal was reserved on first open
-    await expectRevert(lb.connect(user).openWithKey(1), "SoldOut");
+    await expectRevert(lb.connect(userB).openWithKey(1), "SoldOut");
   });
 });
 

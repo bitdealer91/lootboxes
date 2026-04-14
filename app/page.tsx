@@ -14,8 +14,6 @@ import { formatPrizeTitle, PRIZES_BY_ITEM_TYPE } from "./lootbox/prizes";
 const LOOTBOX = (process.env.NEXT_PUBLIC_LOOTBOX_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`;
 // Input keys that are mixed into lootbox keys (Odyssey keys on mainnet; TestKeys1155 on testnet)
 const INPUT_KEYS = (process.env.NEXT_PUBLIC_INPUT_KEYS_ADDRESS ||
-  // backward compatible with the dedicated testnet page env
-  process.env.NEXT_PUBLIC_TEST_INPUT_KEYS_ADDRESS ||
   process.env.NEXT_PUBLIC_KEYS_ADDRESS ||
   "0x2d535a2588E7c3f5F213F3b3324F44E146Ca5306") as `0x${string}`;
 // Mixer that converts input keys -> LootboxKey
@@ -37,11 +35,10 @@ const LOOTBOX_KEY_IDS = (process.env.NEXT_PUBLIC_LOOTBOX_KEY_IDS || "1")
 
 const MIX_RECIPE_ID = BigInt(process.env.NEXT_PUBLIC_RECIPE_ID || "1");
 const MIX_REQUIRED_TOTAL = BigInt(process.env.NEXT_PUBLIC_MIX_REQUIRED_TOTAL || "32");
-const ENABLE_TEST_MINT = process.env.NEXT_PUBLIC_ENABLE_TEST_MINT === "true";
 const ENABLE_REWARDS_REDIS = process.env.NEXT_PUBLIC_ENABLE_REWARDS_REDIS === "true";
 const EXPLORER_TX_BASE =
   process.env.NEXT_PUBLIC_EXPLORER_TX_BASE ||
-  (Number(process.env.NEXT_PUBLIC_CHAIN_ID || "0") === 50312 ? "https://shannon-explorer.somnia.network/tx/" : "");
+  (Number(process.env.NEXT_PUBLIC_CHAIN_ID || "0") === 5031 ? "https://explorer.somnia.network/tx/" : "");
 
 const lootboxAbi = parseAbi([
   "function openWithKey(uint256 keyId) external",
@@ -561,41 +558,6 @@ export default function LootboxPage() {
     return inputTotal >= need ? 0n : need - inputTotal;
   }, [inputTotal, desiredLootboxKeysToCraft]);
 
-  async function mintMissingInputKeys() {
-    if (!address) return;
-    if (!ENABLE_TEST_MINT) {
-      setMixError("Test mint is disabled (set NEXT_PUBLIC_ENABLE_TEST_MINT=true).");
-      return;
-    }
-    if (!isCorrectChain) {
-      setMixError(`Wrong network. Switch wallet to chainId ${somniaChain.id}.`);
-      return;
-    }
-    if (!isInputKeysConfigured) {
-      setMixError("Input keys address is not configured.");
-      return;
-    }
-    if (missingInputKeys <= 0n) return;
-
-    setMixing(true);
-    setMixError(null);
-    try {
-      // Mint missing amount to id=1 (simplest UX for testnet)
-      const txHash = await writeContractAsync({
-        address: INPUT_KEYS,
-        abi: keysAbi,
-        functionName: "mintBatchTo",
-        args: [address, [1n], [missingInputKeys]]
-      });
-      if (publicClient) await publicClient.waitForTransactionReceipt({ hash: txHash });
-      pushTxToast("Keys minted", txHash);
-      await refetchInputKeyBalances?.();
-    } catch (e) {
-      setMixError(e instanceof Error ? e.message : "Mint failed");
-    } finally {
-      setMixing(false);
-    }
-  }
 
   async function openOnchain(keyId: bigint) {
     if (!address) return;
@@ -1330,14 +1292,6 @@ export default function LootboxPage() {
                 +
               </button>
             </div>
-
-            {ENABLE_TEST_MINT && missingInputKeys > 0n && (
-              <div className="modal-actions" style={{ justifyContent: "flex-start" }}>
-                <button className="btn ghost" onClick={mintMissingInputKeys} disabled={mixing}>
-                  Mint missing keys (+{missingInputKeys.toString()})
-                </button>
-              </div>
-            )}
 
             {mixError && <p className="modal-sub" style={{ marginTop: 10, color: "rgba(255,255,255,0.85)" }}>{mixError}</p>}
 

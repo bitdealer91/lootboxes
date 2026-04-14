@@ -1,5 +1,7 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import hre from "hardhat";
+
+const { ethers } = hre;
 import { expectRevert } from "./helpers.js";
 
 // Odyssey requirement: 100 of any ids in [1..8]
@@ -61,13 +63,13 @@ describe("Mixer", function () {
       })
       .filter(Boolean);
     const ev = decoded.find((e) => e.name === "Mixed");
-    expect(ev.args.recipeId).to.equal(1);
+    expect(ev.args.recipeId).to.equal(1n);
     expect(ev.args.user).to.equal(user.address);
     expect(ev.args.inputToken).to.equal(await odysseyKeys.getAddress());
-    expect(ev.args.requiredTotal).to.equal(100);
+    expect(ev.args.requiredTotal).to.equal(100n);
     expect(ev.args.outputKey).to.equal(await lootboxKey.getAddress());
-    expect(ev.args.outputKeyId).to.equal(1);
-    expect(ev.args.outputAmount).to.equal(1);
+    expect(ev.args.outputKeyId).to.equal(1n);
+    expect(ev.args.outputAmount).to.equal(1n);
 
     const after1 = await odysseyKeys.balanceOf(user.address, 1);
     const after7 = await odysseyKeys.balanceOf(user.address, 7);
@@ -77,11 +79,11 @@ describe("Mixer", function () {
     expect(after7).to.equal(before7 - 40n);
 
     // User receives lootbox key
-    expect(await lootboxKey.balanceOf(user.address, 1)).to.equal(1);
+    expect(await lootboxKey.balanceOf(user.address, 1)).to.equal(1n);
 
     // consumeTo (mixer) holds escrowed inputs
-    expect(await odysseyKeys.balanceOf(await mixer.getAddress(), 1)).to.equal(60);
-    expect(await odysseyKeys.balanceOf(await mixer.getAddress(), 7)).to.equal(40);
+    expect(await odysseyKeys.balanceOf(await mixer.getAddress(), 1)).to.equal(60n);
+    expect(await odysseyKeys.balanceOf(await mixer.getAddress(), 7)).to.equal(40n);
   });
 
   it("rejects ids out of allowed range", async function () {
@@ -152,7 +154,7 @@ describe("Mixer", function () {
     expect(after).to.equal(before - 100n);
 
     // Since burn mode, mixer/sink should not receive the inputs
-    expect(await odysseyKeys.balanceOf(await mixer.getAddress(), 2)).to.equal(0);
+    expect(await odysseyKeys.balanceOf(await mixer.getAddress(), 2)).to.equal(0n);
   });
 });
 

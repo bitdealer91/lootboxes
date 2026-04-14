@@ -1,5 +1,7 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import hre from "hardhat";
+
+const { ethers } = hre;
 import { expectRevert } from "./helpers.js";
 
 // Integration test: Keys1155 mintWithSig -> Mixer -> LootboxKey.
@@ -75,14 +77,14 @@ describe("Keys1155 + Mixer", function () {
       nonce++;
     }
 
-    expect(await keys.balanceOf(user.address, 1)).to.equal(60);
-    expect(await keys.balanceOf(user.address, 7)).to.equal(40);
+    expect(await keys.balanceOf(user.address, 1)).to.equal(60n);
+    expect(await keys.balanceOf(user.address, 7)).to.equal(40n);
 
     await keys.connect(user).setApprovalForAll(await mixer.getAddress(), true);
 
     await mixer.connect(user).mixERC1155(1, [1, 7], [60, 40]);
 
-    expect(await lootboxKey.balanceOf(user.address, 1)).to.equal(1);
+    expect(await lootboxKey.balanceOf(user.address, 1)).to.equal(1n);
   });
 
   it("burn-mode should fail with BurnFailed if input token has no burnBatch", async function () {
