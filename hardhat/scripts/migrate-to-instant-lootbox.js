@@ -55,7 +55,8 @@ async function main() {
 
   const autoSetPrize = boolEnv("AUTO_SET_PRIZE", true);
   const autoLockLootbox = boolEnv("AUTO_LOCK_LOOTBOX", false);
-  const nftPrizeItemType = Number.parseInt(process.env.NFT_PRIZE_ITEM_TYPE || "0", 10);
+  const nftPrizeItemType = Number.parseInt(process.env.NFT_PRIZE_ITEM_TYPE || "6", 10);
+  const maxSuccessfulOpens = Number.parseInt(process.env.MAX_SUCCESSFUL_OPENS || "2", 10);
 
   const [signer] = await ethers.getSigners();
   const signerAddr = (await signer.getAddress()).toLowerCase();
@@ -110,8 +111,8 @@ async function main() {
   const newVaultAddress = await newVault.getAddress();
   console.log("New vault:", newVaultAddress);
 
-  const InstantLootbox = await ethers.getContractFactory("TestLootboxInstant");
-  const newLootbox = await InstantLootbox.deploy(lootboxKeyAddress);
+  const InstantLootbox = await ethers.getContractFactory("Lootbox");
+  const newLootbox = await InstantLootbox.deploy(lootboxKeyAddress, maxSuccessfulOpens);
   await newLootbox.waitForDeployment();
   const newLootboxAddress = await newLootbox.getAddress();
   console.log("New instant lootbox:", newLootboxAddress);
@@ -150,8 +151,8 @@ async function main() {
     const cap = Number.parseInt(process.env.NFT_PRIZE_CAP || String(withdrawnTokenIds.length), 10);
     if (!Number.isFinite(cap) || cap < 0 || cap > 0xffffffff) throw new Error("Bad NFT_PRIZE_CAP");
 
-    // TestLootboxInstant.PrizeKind.ERC721_VAULT = 2, amount must be 1.
-    const setPrizeTx = await newLootbox.setPrize(nftPrizeItemType, cap, 2, newVaultAddress, 1);
+    // Lootbox.PrizeKind.ERC721_VAULT = 2, id=0, amount=1.
+    const setPrizeTx = await newLootbox.setPrize(nftPrizeItemType, cap, 2, newVaultAddress, 0, 1);
     console.log("newLootbox.setPrize tx:", setPrizeTx.hash);
     await setPrizeTx.wait();
   }

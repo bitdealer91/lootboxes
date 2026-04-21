@@ -49,13 +49,17 @@ async function main() {
   await tx.wait();
   console.log("Granted MINTER_ROLE to Mixer");
 
-  // RecipeId 1: 32 distinct ids 1..8 from Odyssey => 1 LootboxKey id=1 (BURN keys on mix)
+  tx = await lootboxKey.setMixer(await mixer.getAddress());
+  await tx.wait();
+  console.log("LootboxKey.setMixer -> Mixer");
+
+  // RecipeId 1: 8 Odyssey keys (ids 1..8) => 1 LootboxKey id=1 (BURN keys on mix)
   tx = await mixer.setRecipe(1, {
     tokenType: 0, // ERC1155
     inputToken: odysseyKeys,
     minId: 1,
     maxId: 8,
-    requiredTotal: 32,
+    requiredTotal: 8,
     mode: 1, // BURN (requires Odyssey collection burnBatch + Mixer approval)
     consumeTo: ethers.ZeroAddress,
     outputKey: await lootboxKey.getAddress(),
@@ -78,7 +82,7 @@ async function main() {
     lootboxKey: await lootboxKey.getAddress(),
     recipeId: 1,
     mixMode: "BURN",
-    requiredTotal: 32
+    requiredTotal: 8
   }, null, 2));
 }
 

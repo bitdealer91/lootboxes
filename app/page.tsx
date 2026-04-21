@@ -34,7 +34,10 @@ const LOOTBOX_KEY_IDS = (process.env.NEXT_PUBLIC_LOOTBOX_KEY_IDS || "1")
   .map((id) => BigInt(id));
 
 const MIX_RECIPE_ID = BigInt(process.env.NEXT_PUBLIC_RECIPE_ID || "1");
-const MIX_REQUIRED_TOTAL = BigInt(process.env.NEXT_PUBLIC_MIX_REQUIRED_TOTAL || "32");
+const MIX_REQUIRED_TOTAL = BigInt(process.env.NEXT_PUBLIC_MIX_REQUIRED_TOTAL || "8");
+/** On-chain itemType for ERC721 vault rewards (S5 Quills = 6). */
+const NFT_ITEM_TYPE = Number.parseInt(process.env.NEXT_PUBLIC_NFT_ITEM_TYPE || "6", 10);
+const LOOTBOX_KEY_ID_MIXER_CAP = LOOTBOX_KEY_IDS[0] ?? 1n;
 const ENABLE_REWARDS_REDIS = process.env.NEXT_PUBLIC_ENABLE_REWARDS_REDIS === "true";
 const EXPLORER_TX_BASE =
   process.env.NEXT_PUBLIC_EXPLORER_TX_BASE ||
@@ -54,6 +57,8 @@ const keysAbi = parseAbi([
   "function balanceOf(address account, uint256 id) view returns (uint256)",
   "function setApprovalForAll(address operator, bool approved) external",
   "function isApprovedForAll(address account, address operator) view returns (bool)",
+  "function mintedByMixer(uint256 id) view returns (uint256)",
+  "function MAX_MIXER_MINTS() view returns (uint256)",
   // TestKeys1155 faucet (testnet only)
   "function mintBatchTo(address to, uint256[] ids, uint256[] amounts) external"
 ]);
@@ -67,19 +72,19 @@ const lootboxClaimsAbi = parseAbi([
 function buildShareText(itemType: number): string {
   switch (itemType) {
     case 0:
-      return "Luck was on my side—just pulled a Quills NFT from the Somnia Lootbox. #Somnia #Lootbox #Web3";
+      return "Just pulled 125 Points for S5 from the Somnia Lootbox. #Somnia #Lootbox #Web3";
     case 1:
-      return "Just pulled 500 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
+      return "Just pulled 180 Points for S5 from the Somnia Lootbox. #Somnia #Lootbox #Web3";
     case 2:
-      return "Just pulled 750 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
+      return "Just pulled 250 Points for S5 from the Somnia Lootbox. #Somnia #Lootbox #Web3";
     case 3:
-      return "Just pulled 1000 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
+      return "Just pulled 300 Points for S5 from the Somnia Lootbox. #Somnia #Lootbox #Web3";
     case 4:
-      return "Just pulled 1200 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
+      return "Just pulled 375 Points for S5 from the Somnia Lootbox. #Somnia #Lootbox #Web3";
     case 5:
-      return "Just pulled 1500 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
+      return "Just pulled 500 Points for S5 from the Somnia Lootbox. #Somnia #Lootbox #Web3";
     case 6:
-      return "Just pulled 2000 Points from the Somnia Lootbox. #Somnia #Lootbox #Web3";
+      return "Luck was on my side—just pulled a Quills NFT from the Somnia Lootbox. #Somnia #Lootbox #Web3";
     default:
       return "Just opened the Somnia Lootbox. #Somnia #Lootbox #Web3";
   }
@@ -187,6 +192,23 @@ export default function LootboxPage() {
     query: { enabled: !!uiAddress }
   });
 
+  const { data: lootboxKeyMixerCapReads, refetch: refetchLootboxKeyMixerCap } = useReadContracts({
+    allowFailure: true,
+    contracts:
+      LOOTBOX_KEYS !== "0x0000000000000000000000000000000000000000"
+        ? [
+            {
+              address: LOOTBOX_KEYS,
+              abi: keysAbi,
+              functionName: "mintedByMixer",
+              args: [LOOTBOX_KEY_ID_MIXER_CAP]
+            },
+            { address: LOOTBOX_KEYS, abi: keysAbi, functionName: "MAX_MIXER_MINTS", args: [] }
+          ]
+        : [],
+    query: { enabled: LOOTBOX_KEYS !== "0x0000000000000000000000000000000000000000" }
+  });
+
   const { data: inputKeyBalances, refetch: refetchInputKeyBalances } = useReadContracts({
     allowFailure: true,
     contracts: uiAddress
@@ -250,6 +272,32 @@ export default function LootboxPage() {
       return acc + BigInt(e.result as bigint);
     }, 0n);
   }, [inputKeyBalances]);
+
+  const mixerMintedForCap = useMemo(() => {
+    const e = lootboxKeyMixerCapReads?.[0] as unknown as { status?: string; result?: unknown } | undefined;
+    if (!e || e.status !== "success" || e.result === undefined) return null;
+    return BigInt(e.result as bigint);
+  }, [lootboxKeyMixerCapReads]);
+
+  const mixerMintCapMax = useMemo(() => {
+    const e = lootboxKeyMixerCapReads?.[1] as unknown as { status?: string; result?: unknown } | undefined;
+    if (!e || e.status !== "success" || e.result === undefined) return null;
+    return BigInt(e.result as bigint);
+  }, [lootboxKeyMixerCapReads]);
+
+  /** Remaining keys the mixer contract is allowed to mint (null = legacy LootboxKey without cap views). */
+  const mixerSlotsRemaining = useMemo(() => {
+    if (mixerMintedForCap === null || mixerMintCapMax === null) return null;
+    const r = mixerMintCapMax - mixerMintedForCap;
+    return r > 0n ? r : 0n;
+  }, [mixerMintedForCap, mixerMintCapMax]);
+
+  const maxCraftableLootboxKeys = useMemo(() => {
+    const fromInput = MIX_REQUIRED_TOTAL > 0n ? Number(inputTotal / MIX_REQUIRED_TOTAL) : 0;
+    const safeInput = Number.isFinite(fromInput) && fromInput > 0 ? fromInput : 0;
+    if (mixerSlotsRemaining === null) return safeInput;
+    return Math.min(safeInput, Number(mixerSlotsRemaining));
+  }, [inputTotal, mixerSlotsRemaining]);
 
   const inputApproved = approvals?.[0]?.status === "success" ? Boolean(approvals[0].result) : false;
   const lootboxKeyApproved = approvals?.[1]?.status === "success" ? Boolean(approvals[1].result) : false;
@@ -361,12 +409,17 @@ export default function LootboxPage() {
 
   // Keep claim buttons in sync with on-chain claimable counters for NFT vault rewards.
   useEffect(() => {
+    if (!showMixerModal) return;
+    void refetchLootboxKeyMixerCap?.();
+  }, [showMixerModal, refetchLootboxKeyMixerCap]);
+
+  useEffect(() => {
     if (!showRewardsModal) return;
     if (!uiAddress || !publicClient) return;
     const nftVaults = Array.from(
       new Set(
         rewardHistory
-          .filter((r) => r.itemType === 0 && !!r.token)
+          .filter((r) => r.itemType === NFT_ITEM_TYPE && !!r.token)
           .map((r) => (r.token as `0x${string}`).toLowerCase())
       )
     ) as `0x${string}`[];
@@ -431,6 +484,7 @@ export default function LootboxPage() {
     setMixCountInput("1");
     setMixError(null);
     setShowMixerModal(true);
+    void refetchLootboxKeyMixerCap?.();
   }
 
   async function approveInputKeys() {
@@ -489,9 +543,11 @@ export default function LootboxPage() {
   }
 
   function adjustMixCount(delta: number) {
+    const cap = maxCraftableLootboxKeys;
+    if (!Number.isFinite(cap) || cap <= 0) return;
     const current = Number.parseInt(mixCountInput || "1", 10);
     const base = Number.isFinite(current) && current > 0 ? current : 1;
-    const next = Math.max(1, base + delta);
+    const next = Math.min(cap, Math.max(1, base + delta));
     setMixCountInput(String(next));
   }
 
@@ -502,8 +558,11 @@ export default function LootboxPage() {
   }
 
   function normalizeMixCount() {
+    const cap = maxCraftableLootboxKeys;
     const n = Number.parseInt(mixCountInput || "1", 10);
-    setMixCountInput(String(Number.isFinite(n) && n > 0 ? n : 1));
+    let v = Number.isFinite(n) && n > 0 ? n : 1;
+    if (Number.isFinite(cap) && cap > 0) v = Math.min(v, cap);
+    setMixCountInput(String(v));
   }
 
   function buildMixArgs(need: bigint, remaining: Map<bigint, bigint>) {
@@ -534,11 +593,20 @@ export default function LootboxPage() {
       setMixError("Mixer/Input keys/LootboxKey are not configured.");
       return;
     }
-    const count = Number.parseInt(mixCountInput, 10);
+    if (maxCraftableLootboxKeys <= 0) {
+      setMixError(
+        mixerSlotsRemaining !== null && mixerSlotsRemaining === 0n
+          ? "The mixer has already minted the maximum number of Lootbox Keys (on-chain limit)."
+          : "Not enough input keys to craft a Lootbox Key."
+      );
+      return;
+    }
+    let count = Number.parseInt(mixCountInput, 10);
     if (!Number.isFinite(count) || count <= 0) {
       setMixError("Enter a positive number.");
       return;
     }
+    count = Math.min(count, maxCraftableLootboxKeys);
     const totalNeed = MIX_REQUIRED_TOTAL * BigInt(count);
     if (inputTotal < totalNeed) {
       setMixError(`Not enough input keys. Need ${totalNeed.toString()} total, you have ${inputTotal.toString()}.`);
@@ -574,7 +642,7 @@ export default function LootboxPage() {
         if (publicClient) await publicClient.waitForTransactionReceipt({ hash: txHash });
         pushTxToast(`Mixer success (${i + 1}/${count})`, txHash);
       }
-      await Promise.all([refetchInputKeyBalances?.(), refetchLootboxKeyBalances?.()]);
+      await Promise.all([refetchInputKeyBalances?.(), refetchLootboxKeyBalances?.(), refetchLootboxKeyMixerCap?.()]);
       setShowMixerModal(false);
     } catch (e) {
       setMixError(e instanceof Error ? e.message : "Mix failed");
@@ -589,9 +657,11 @@ export default function LootboxPage() {
   }, [mixCountInput]);
 
   const missingInputKeys = useMemo(() => {
-    const need = MIX_REQUIRED_TOTAL * BigInt(desiredLootboxKeysToCraft);
+    const craft =
+      maxCraftableLootboxKeys > 0 ? Math.min(desiredLootboxKeysToCraft, maxCraftableLootboxKeys) : desiredLootboxKeysToCraft;
+    const need = MIX_REQUIRED_TOTAL * BigInt(craft > 0 ? craft : 1);
     return inputTotal >= need ? 0n : need - inputTotal;
-  }, [inputTotal, desiredLootboxKeysToCraft]);
+  }, [inputTotal, desiredLootboxKeysToCraft, maxCraftableLootboxKeys]);
 
 
   async function openOnchain(keyId: bigint) {
@@ -920,7 +990,7 @@ export default function LootboxPage() {
     if (!isCorrectChain) return;
     try {
       setClaimingRewardId(entry.id);
-      if (entry.itemType === 0) {
+      if (entry.itemType === NFT_ITEM_TYPE) {
         if (!entry.token || entry.token === "0x0000000000000000000000000000000000000000") return;
         const txHash = await writeContractAsync({
           address: LOOTBOX,
@@ -1260,6 +1330,18 @@ export default function LootboxPage() {
                 Requires <b>{MIX_REQUIRED_TOTAL.toString()}</b> input keys (ids {INPUT_KEY_IDS[0]?.toString()}–{INPUT_KEY_IDS.at(-1)?.toString()}) per LootboxKey.
               </p>
               <p className="modal-sub">You have <b>{inputTotal.toString()}</b> input keys total.</p>
+              {mixerSlotsRemaining !== null && mixerMintCapMax !== null && (
+                <p className="modal-sub">
+                  Mixer can mint at most <b>{mixerMintCapMax.toString()}</b> Lootbox Keys total;{" "}
+                  <b>{mixerSlotsRemaining.toString()}</b> remaining.
+                </p>
+              )}
+              {maxCraftableLootboxKeys > 0 && (
+                <p className="modal-sub" style={{ opacity: 0.85 }}>
+                  You can craft up to <b>{maxCraftableLootboxKeys}</b> key{maxCraftableLootboxKeys === 1 ? "" : "s"} right now
+                  (input balance + mixer cap).
+                </p>
+              )}
               <p className="modal-sub" style={{ opacity: 0.75 }}>
                 Reading input keys from <code>{INPUT_KEYS}</code>
               </p>
@@ -1292,7 +1374,12 @@ export default function LootboxPage() {
                 onBlur={normalizeMixCount}
                 className="neo-input"
               />
-              <button className="btn ghost step-btn" type="button" onClick={() => adjustMixCount(1)} disabled={mixing}>
+              <button
+                className="btn ghost step-btn"
+                type="button"
+                onClick={() => adjustMixCount(1)}
+                disabled={mixing || maxCraftableLootboxKeys <= Number.parseInt(mixCountInput || "1", 10)}
+              >
                 +
               </button>
             </div>
@@ -1301,7 +1388,7 @@ export default function LootboxPage() {
 
             <div className="modal-actions">
               <button className="btn ghost" onClick={() => setShowMixerModal(false)} disabled={mixing}>Cancel</button>
-              <button className="btn primary" onClick={confirmMix} disabled={mixing || !inputApproved}>
+              <button className="btn primary" onClick={confirmMix} disabled={mixing || !inputApproved || maxCraftableLootboxKeys <= 0}>
                 {mixing ? "Mixing…" : "Mix"}
               </button>
             </div>
@@ -1326,8 +1413,9 @@ export default function LootboxPage() {
                   const title = formatPrizeTitle(r.itemType);
                   const isNoWin = r.itemType === 255;
                   const onchainNftClaimable =
-                    r.itemType === 0 && r.token ? nftClaimableByVault[r.token.toLowerCase()] : undefined;
-                  const claimable = r.itemType === 0 && (onchainNftClaimable === undefined || onchainNftClaimable > 0n);
+                    r.itemType === NFT_ITEM_TYPE && r.token ? nftClaimableByVault[r.token.toLowerCase()] : undefined;
+                  const claimable =
+                    r.itemType === NFT_ITEM_TYPE && (onchainNftClaimable === undefined || onchainNftClaimable > 0n);
                   const isClaimed = !!r.claimed;
                   return (
                     <div

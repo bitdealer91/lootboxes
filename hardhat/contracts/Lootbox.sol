@@ -15,84 +15,81 @@ interface IMintableERC721 {
     function mint(address to) external returns (uint256 tokenId);
 }
 
-/// @notice Lootbox with on-chain weighted selection and strict supply caps.
-/// @dev RNG must be verifiable (VRF) in production. Tests use a mock RNG caller.
+interface IRewardVaultERC721 {
+    function remaining() external view returns (uint256);
+    function dispense(address to) external returns (uint256 tokenId);
+}
+
+/// @notice Instant lootbox: burn key, draw, and award in one transaction.
+/// @dev Randomness is on-chain only (not VRF). Probabilities follow remaining counts per bucket
+///      (same mass model as `SomniaLootboxVRF`). Use `maxSuccessfulOpensPerUser_ = 0` for no per-user cap.
 contract Lootbox is Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
+
+    uint8 public constant PRIZE_COUNT = 7;
 
     enum PrizeKind {
         NONE,
         ERC20,
-        ERC721,
+        ERC721_VAULT,
         POINTS,
+        ERC721,
         WHITELIST
     }
 
     struct PrizeConfig {
-        // Weight is an integer; relative weights define probabilities.
-        uint32 weight;
-        // Remaining count for this prize.
         uint32 remaining;
         PrizeKind kind;
         address token;
-        // For ERC20: ignored. For POINTS/WHITELIST: ignored.
-        // For ERC721: ignored (tokenId determined at mint).
         uint256 id;
-        // For ERC20: transfer amount. For POINTS: points amount.
-        // For ERC721/WHITELIST: should be 1.
         uint256 amount;
     }
 
     event OpenRequested(address indexed user, uint256 requestId);
-    /// @notice Award has been determined on-chain (may be claimable for token/NFT).
     event ItemAwarded(address indexed user, uint8 itemType, address token, uint256 id, uint256 amount);
-    /// @notice User has claimed a previously awarded item (for ERC20 / ERC721).
     event ItemClaimed(address indexed user, uint8 itemType, address token, uint256 id, uint256 amount);
+    event PointsAwarded(address indexed user, uint256 amount, uint256 newTotal);
+    event SweptNative(address indexed to, uint256 amount);
+    event SweptErc20(address indexed token, address indexed to, uint256 amount);
 
     IERC1155BurnableKeys public immutable keys;
 
-    /// @dev Only this address can fulfill randomness (VRF coordinator / oracle).
-    address public rngProvider;
-
-    /// @dev 0..4 item types. Keep in sync with the frontend mapping.
-    PrizeConfig[5] public prizes;
-
-    /// @dev Total prizes remaining across all item types.
-    uint256 public remainingTotal;
+    /// @notice Prize table. Item types are 0..PRIZE_COUNT-1.
+    PrizeConfig[PRIZE_COUNT] public prizes;
 
     uint256 public nextRequestId;
-    mapping(uint256 => address) public requestUser;
-    mapping(address => bool) public userHasPending;
 
     mapping(address => uint256) public points;
     mapping(address => bool) public whitelisted;
 
-    // Claimable rewards (fulfill does NOT make external calls, so it can't get stuck)
-    mapping(address => mapping(address => uint256)) public claimableErc20; // user => token => amount
-    mapping(address => mapping(address => uint256)) public claimableErc721; // user => nft => count
+    mapping(address => mapping(address => uint256)) public claimableErc20;
+    mapping(address => mapping(address => uint256)) public claimableErc721;
+    mapping(address => uint256) public claimableNative;
+    mapping(address => uint256) public reservedErc721;
 
     bool public configLocked;
 
-    error NotRngProvider();
-    error BadRequest();
-    error PendingRequest();
+    uint256 public successfulOpens;
+    uint256 public immutable maxSuccessfulOpensPerUser;
+    mapping(address => uint256) public userSuccessfulOpens;
+
     error SoldOut();
     error ConfigLockedErr();
+    error NotLive();
+    error MaxOpensReached();
+    error BadPrizeConfig();
+    error VaultUnavailable();
 
-    constructor(address keys_, address rngProvider_) Ownable(msg.sender) {
+    constructor(address keys_, uint256 maxSuccessfulOpensPerUser_) Ownable(msg.sender) {
         require(keys_ != address(0), "KEYS_0");
         keys = IERC1155BurnableKeys(keys_);
-        rngProvider = rngProvider_;
+        maxSuccessfulOpensPerUser = maxSuccessfulOpensPerUser_;
     }
 
-    function setRngProvider(address rngProvider_) external onlyOwner {
-        if (configLocked) revert ConfigLockedErr();
-        rngProvider = rngProvider_;
-    }
+    receive() external payable {}
 
     function setPrize(
         uint8 itemType,
-        uint32 weight,
         uint32 remaining,
         PrizeKind kind,
         address token,
@@ -100,24 +97,22 @@ contract Lootbox is Ownable, Pausable, ReentrancyGuard {
         uint256 amount
     ) external onlyOwner {
         if (configLocked) revert ConfigLockedErr();
-        require(itemType < 5, "BAD_ITEM");
+        require(itemType < PRIZE_COUNT, "BAD_ITEM");
 
-        // Update remainingTotal accounting.
-        uint32 prev = prizes[itemType].remaining;
-        if (remaining >= prev) {
-            remainingTotal += uint256(remaining - prev);
-        } else {
-            remainingTotal -= uint256(prev - remaining);
+        if (kind == PrizeKind.NONE) {
+            if (remaining > 0) revert BadPrizeConfig();
+        } else if (kind == PrizeKind.ERC721_VAULT) {
+            if (token == address(0)) revert BadPrizeConfig();
+            if (amount != 1) revert BadPrizeConfig();
+        } else if (kind == PrizeKind.POINTS) {
+            if (amount == 0) revert BadPrizeConfig();
+        } else if (kind == PrizeKind.ERC20) {
+            if (amount == 0) revert BadPrizeConfig();
+        } else if (kind == PrizeKind.ERC721) {
+            if (amount != 1) revert BadPrizeConfig();
         }
 
-        prizes[itemType] = PrizeConfig({
-            weight: weight,
-            remaining: remaining,
-            kind: kind,
-            token: token,
-            id: id,
-            amount: amount
-        });
+        prizes[itemType] = PrizeConfig({remaining: remaining, kind: kind, token: token, id: id, amount: amount});
     }
 
     function lockConfig() external onlyOwner {
@@ -132,80 +127,79 @@ contract Lootbox is Ownable, Pausable, ReentrancyGuard {
         _unpause();
     }
 
-    /// @notice Burn exactly 1 key and request an opening.
-    function openWithKey(uint256 keyId) external nonReentrant whenNotPaused {
-        if (userHasPending[msg.sender]) revert PendingRequest();
-        if (remainingTotal == 0) revert SoldOut();
+    function effectiveRemainingTotal() external view returns (uint256) {
+        return _effectiveRemainingTotal();
+    }
 
-        // Reserve one prize slot so the user can never burn a key and get stuck
-        // due to global sold-out between request and fulfill.
-        remainingTotal -= 1;
+    /// @notice Burn exactly 1 key; randomness is derived on-chain; prize is awarded in the same transaction.
+    function openWithKey(uint256 keyId) external nonReentrant whenNotPaused {
+        if (!configLocked) revert NotLive();
+        if (maxSuccessfulOpensPerUser != 0 && userSuccessfulOpens[msg.sender] >= maxSuccessfulOpensPerUser) {
+            revert MaxOpensReached();
+        }
+
+        uint256 effTotal = _effectiveRemainingTotal();
+        if (effTotal == 0) revert SoldOut();
 
         keys.burn(msg.sender, keyId, 1);
 
         uint256 requestId = ++nextRequestId;
-        requestUser[requestId] = msg.sender;
-        userHasPending[msg.sender] = true;
-
         emit OpenRequested(msg.sender, requestId);
-    }
 
-    /// @notice Fulfill a request using verifiable randomness.
-    function fulfillRandomness(uint256 requestId, uint256 randomness) external nonReentrant {
-        if (msg.sender != rngProvider) revert NotRngProvider();
-
-        address user = requestUser[requestId];
-        if (user == address(0)) revert BadRequest();
-
-        delete requestUser[requestId];
-        userHasPending[user] = false;
+        uint256 randomness = uint256(
+            keccak256(abi.encodePacked(block.prevrandao, blockhash(block.number - 1), msg.sender, requestId, address(this)))
+        );
 
         uint8 itemType = _pickPrize(randomness);
-        _award(user, itemType);
+        _award(msg.sender, itemType);
+
+        successfulOpens += 1;
+        userSuccessfulOpens[msg.sender] += 1;
     }
 
     function _pickPrize(uint256 randomness) internal returns (uint8 itemType) {
-        // totalWeight from prizes with remaining > 0
-        uint256 totalWeight;
-        for (uint8 i = 0; i < 5; i++) {
-            if (prizes[i].remaining > 0) totalWeight += prizes[i].weight;
-        }
+        uint256 effTotal = _effectiveRemainingTotal();
+        if (effTotal == 0) revert SoldOut();
+        uint256 r = randomness % effTotal;
 
-        // remainingTotal was reserved on openWithKey, so this should never be 0
-        // unless misconfigured.
-        if (totalWeight == 0) revert SoldOut();
-
-        uint256 r = randomness % totalWeight;
-        for (uint8 i = 0; i < 5; i++) {
+        for (uint256 i = 0; i < PRIZE_COUNT; i++) {
             PrizeConfig storage p = prizes[i];
-            if (p.remaining == 0) continue;
-
-            uint256 w = p.weight;
-            if (r < w) {
+            uint256 m = _effectiveRemainingFor(p);
+            if (m == 0) continue;
+            if (r < m) {
                 p.remaining -= 1;
-                return i;
+                return uint8(i);
             }
-            r -= w;
+            r -= m;
         }
-
-        // Should be unreachable.
-        return 4;
+        revert SoldOut();
     }
 
     function _award(address user, uint8 itemType) internal {
         PrizeConfig storage p = prizes[itemType];
 
         if (p.kind == PrizeKind.ERC20) {
-            // Record as claimable to avoid any chance of fulfill getting stuck
-            // due to token transfer failure (e.g. temporary underfunding).
-            claimableErc20[user][p.token] += p.amount;
-            emit ItemAwarded(user, itemType, p.token, 0, p.amount);
+            if (p.token == address(0)) {
+                claimableNative[user] += p.amount;
+                emit ItemAwarded(user, itemType, address(0), 0, p.amount);
+            } else {
+                claimableErc20[user][p.token] += p.amount;
+                emit ItemAwarded(user, itemType, p.token, 0, p.amount);
+            }
             return;
         }
 
         if (p.kind == PrizeKind.ERC721) {
-            // Record as claimable. Mint happens on claim.
             claimableErc721[user][p.token] += 1;
+            emit ItemAwarded(user, itemType, p.token, 0, 1);
+            return;
+        }
+
+        if (p.kind == PrizeKind.ERC721_VAULT) {
+            uint256 avail = _vaultAvailable(p.token);
+            if (avail == 0) revert VaultUnavailable();
+            claimableErc721[user][p.token] += 1;
+            reservedErc721[p.token] += 1;
             emit ItemAwarded(user, itemType, p.token, 0, 1);
             return;
         }
@@ -213,6 +207,7 @@ contract Lootbox is Ownable, Pausable, ReentrancyGuard {
         if (p.kind == PrizeKind.POINTS) {
             points[user] += p.amount;
             emit ItemAwarded(user, itemType, address(0), 0, p.amount);
+            emit PointsAwarded(user, p.amount, points[user]);
             return;
         }
 
@@ -222,11 +217,31 @@ contract Lootbox is Ownable, Pausable, ReentrancyGuard {
             return;
         }
 
-        // NONE
         emit ItemAwarded(user, itemType, address(0), 0, p.amount);
     }
 
-    /// @notice Claim ERC20 rewards for a specific token.
+    function _vaultAvailable(address vault) internal view returns (uint256) {
+        uint256 rem = IRewardVaultERC721(vault).remaining();
+        uint256 res = reservedErc721[vault];
+        return rem > res ? (rem - res) : 0;
+    }
+
+    function _effectiveRemainingFor(PrizeConfig storage p) internal view returns (uint256) {
+        if (p.remaining == 0) return 0;
+        if (p.kind == PrizeKind.ERC721_VAULT) {
+            uint256 avail = _vaultAvailable(p.token);
+            uint256 cap = uint256(p.remaining);
+            return avail < cap ? avail : cap;
+        }
+        return uint256(p.remaining);
+    }
+
+    function _effectiveRemainingTotal() internal view returns (uint256 total) {
+        for (uint256 i = 0; i < PRIZE_COUNT; i++) {
+            total += _effectiveRemainingFor(prizes[i]);
+        }
+    }
+
     function claimErc20(address token) external nonReentrant whenNotPaused {
         uint256 amt = claimableErc20[msg.sender][token];
         require(amt > 0, "NOTHING");
@@ -235,19 +250,66 @@ contract Lootbox is Ownable, Pausable, ReentrancyGuard {
         emit ItemClaimed(msg.sender, 255, token, 0, amt);
     }
 
-    /// @notice Claim up to `maxCount` ERC721 mints for a specific NFT contract.
-    function claimErc721(address nft, uint256 maxCount) external nonReentrant whenNotPaused {
-        uint256 count = claimableErc721[msg.sender][nft];
+    function claimNative() external nonReentrant whenNotPaused {
+        uint256 amt = claimableNative[msg.sender];
+        require(amt > 0, "NOTHING");
+        claimableNative[msg.sender] = 0;
+        (bool ok,) = msg.sender.call{value: amt}("");
+        require(ok, "SEND_FAIL");
+    }
+
+    /// @notice Claim ERC721 mints (legacy `ERC721` prizes) or vault dispenses (`ERC721_VAULT` prizes).
+    function claimErc721(address nftOrVault, uint256 maxCount) external nonReentrant whenNotPaused {
+        uint256 count = claimableErc721[msg.sender][nftOrVault];
         require(count > 0, "NOTHING");
         if (maxCount == 0 || maxCount > count) maxCount = count;
-        claimableErc721[msg.sender][nft] = count - maxCount;
+        claimableErc721[msg.sender][nftOrVault] = count - maxCount;
+
+        // Try vault dispense first (S5 / production path).
+        bool isVault = false;
+        try IRewardVaultERC721(nftOrVault).remaining() returns (uint256) {
+            isVault = true;
+        } catch {
+            isVault = false;
+        }
+
+        if (isVault) {
+            reservedErc721[nftOrVault] -= maxCount;
+            for (uint256 i = 0; i < maxCount; i++) {
+                uint256 tokenId = IRewardVaultERC721(nftOrVault).dispense(msg.sender);
+                emit ItemClaimed(msg.sender, 255, nftOrVault, tokenId, 1);
+            }
+            return;
+        }
 
         for (uint256 i = 0; i < maxCount; i++) {
-            uint256 tokenId = IMintableERC721(nft).mint(msg.sender);
-            emit ItemClaimed(msg.sender, 255, nft, tokenId, 1);
+            uint256 tokenId = IMintableERC721(nftOrVault).mint(msg.sender);
+            emit ItemClaimed(msg.sender, 255, nftOrVault, tokenId, 1);
         }
     }
+
+    /// @notice Admin-only recovery of leftover native balance.
+    /// @dev Restricted to paused state to avoid surprise withdrawals during operation.
+    function sweepNative(address payable to, uint256 amount) external onlyOwner nonReentrant whenPaused {
+        require(to != address(0), "TO_0");
+        uint256 bal = address(this).balance;
+        if (amount == 0) amount = bal;
+        require(amount <= bal, "INSUFFICIENT");
+        (bool ok,) = to.call{value: amount}("");
+        require(ok, "SEND_FAIL");
+        emit SweptNative(to, amount);
+    }
+
+    /// @notice Admin-only recovery of leftover ERC20 balance.
+    /// @dev Restricted to paused state to avoid surprise withdrawals during operation.
+    function sweepErc20(address token, address to, uint256 amount) external onlyOwner nonReentrant whenPaused {
+        require(token != address(0), "TOKEN_0");
+        require(to != address(0), "TO_0");
+        IERC20 erc20 = IERC20(token);
+        uint256 bal = erc20.balanceOf(address(this));
+        if (amount == 0) amount = bal;
+        require(amount <= bal, "INSUFFICIENT");
+        erc20.safeTransfer(to, amount);
+        emit SweptErc20(token, to, amount);
+    }
 }
-
-
-

@@ -17,7 +17,7 @@ describe("SomniaLootboxVRF", function () {
     const lootboxKey = await (await ethers.getContractFactory("LootboxKey")).deploy("");
     const lootbox = await (
       await ethers.getContractFactory("SomniaLootboxVRF")
-    ).deploy(await lootboxKey.getAddress(), await mockVrf.getAddress(), 500_000, 1);
+    ).deploy(await lootboxKey.getAddress(), await mockVrf.getAddress(), 500_000, 1, 0);
 
     const minterRole = await lootboxKey.MINTER_ROLE();
     await lootboxKey.grantRole(minterRole, await lootbox.getAddress());

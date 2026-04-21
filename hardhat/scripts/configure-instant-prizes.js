@@ -47,18 +47,18 @@ async function main() {
     throw new Error("Bad QUILLS_CAP");
   }
 
-  // Keep the previous production points schedule.
+  // S5 points schedule from product requirements.
   const pointSchedule = [
-    { slot: 1, remaining: 6500, amount: 500 },
-    { slot: 2, remaining: 5500, amount: 750 },
-    { slot: 3, remaining: 4000, amount: 1000 },
-    { slot: 4, remaining: 3500, amount: 1200 },
-    { slot: 5, remaining: 2700, amount: 1500 },
-    { slot: 6, remaining: 2172, amount: 2000 }
+    { slot: 0, remaining: 26000, amount: 125 },
+    { slot: 1, remaining: 22000, amount: 180 },
+    { slot: 2, remaining: 16000, amount: 250 },
+    { slot: 3, remaining: 14000, amount: 300 },
+    { slot: 4, remaining: 10800, amount: 375 },
+    { slot: 5, remaining: 8688, amount: 500 }
   ];
 
   const [signer] = await ethers.getSigners();
-  const lootbox = await ethers.getContractAt("TestLootboxInstant", lootboxAddress, signer);
+  const lootbox = await ethers.getContractAt("Lootbox", lootboxAddress, signer);
 
   if (await lootbox.configLocked()) {
     throw new Error("Lootbox config is locked");
@@ -69,32 +69,28 @@ async function main() {
   console.log("Lootbox:", lootboxAddress);
   console.log("Quills vault:", quillsVaultAddress);
 
-  // slot 0: Quills ERC721 vault
-  let tx = await lootbox.setPrize(0, quillsCap, 2, quillsVaultAddress, 1);
-  console.log("setPrize slot0 (Quills) tx:", tx.hash);
+  // slot 6: Quills ERC721 vault (Lootbox.PrizeKind.ERC721_VAULT = 2)
+  let tx = await lootbox.setPrize(6, quillsCap, 2, quillsVaultAddress, 0, 1);
+  console.log("setPrize slot6 (Quills) tx:", tx.hash);
   await tx.wait();
 
   for (const p of pointSchedule) {
-    tx = await lootbox.setPrize(p.slot, p.remaining, 3, ethers.ZeroAddress, p.amount);
+    // Lootbox.PrizeKind.POINTS = 3
+    tx = await lootbox.setPrize(p.slot, p.remaining, 3, ethers.ZeroAddress, 0, p.amount);
     console.log(`setPrize slot${p.slot} (points=${p.amount}) tx:`, tx.hash);
     await tx.wait();
   }
 
-  // Ensure the rest are disabled.
-  for (const slot of [7, 8, 9]) {
-    tx = await lootbox.setPrize(slot, 0, 0, ethers.ZeroAddress, 0);
-    console.log(`setPrize slot${slot} (NONE) tx:`, tx.hash);
-    await tx.wait();
-  }
+  // PRIZE_COUNT is 7 in Lootbox.sol (slots 0..6). No extra slots to clear.
 
-  if (boolEnv("LOCK_CONFIG", false)) {
+  if (boolEnv("LOCK_CONFIG", true)) {
     tx = await lootbox.lockConfig();
     console.log("lockConfig tx:", tx.hash);
     await tx.wait();
   }
 
-  const total = await lootbox.remainingTotal();
-  console.log("remainingTotal:", total.toString());
+  const total = await lootbox.effectiveRemainingTotal();
+  console.log("effectiveRemainingTotal:", total.toString());
   console.log("Done.");
 }
 

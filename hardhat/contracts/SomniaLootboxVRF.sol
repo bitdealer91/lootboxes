@@ -102,8 +102,21 @@ contract SomniaLootboxVRF is Ownable, Pausable, ReentrancyGuard, VRFV2PlusWrappe
     error Erc20PrizesDisabled();
     error RecoveryTooEarly();
     error RecoveryNotPending();
+    error MaxOpensReached();
 
-    constructor(address keys_, address vrfWrapper_, uint32 callbackGasLimit_, uint16 requestConfirmations_)
+    /// @notice Successful VRF fulfillments that awarded a prize (0 = unlimited).
+    uint256 public successfulOpens;
+
+    /// @notice Max successful opens for this lootbox instance (0 = unlimited).
+    uint256 public immutable maxSuccessfulOpens;
+
+    constructor(
+        address keys_,
+        address vrfWrapper_,
+        uint32 callbackGasLimit_,
+        uint16 requestConfirmations_,
+        uint256 maxSuccessfulOpens_
+    )
         Ownable(msg.sender)
         VRFV2PlusWrapperConsumerBase(vrfWrapper_)
     {
@@ -112,6 +125,7 @@ contract SomniaLootboxVRF is Ownable, Pausable, ReentrancyGuard, VRFV2PlusWrappe
         callbackGasLimit = callbackGasLimit_;
         requestConfirmations = requestConfirmations_;
         vrfRecoveryTimeoutSeconds = 1 days;
+        maxSuccessfulOpens = maxSuccessfulOpens_;
     }
 
     receive() external payable {}
@@ -200,6 +214,10 @@ contract SomniaLootboxVRF is Ownable, Pausable, ReentrancyGuard, VRFV2PlusWrappe
         uint256 effTotal = _effectiveRemainingTotal();
         if (effTotal == 0) revert SoldOut();
 
+        if (maxSuccessfulOpens != 0 && successfulOpens + pendingRequests >= maxSuccessfulOpens) {
+            revert MaxOpensReached();
+        }
+
         // Prevent oversubscription: keep one prize slot per pending request.
         if (effTotal <= pendingRequests) revert SoldOut();
 
@@ -281,6 +299,9 @@ contract SomniaLootboxVRF is Ownable, Pausable, ReentrancyGuard, VRFV2PlusWrappe
 
         uint8 itemType = _pickPrize(randomWords[0]);
         _award(user, itemType);
+        if (maxSuccessfulOpens != 0) {
+            successfulOpens += 1;
+        }
     }
 
     function _pickPrize(uint256 randomness) internal returns (uint8 itemType) {

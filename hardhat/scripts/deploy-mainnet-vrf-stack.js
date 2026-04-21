@@ -57,16 +57,18 @@ async function main() {
 
   await (await lootboxKey.grantRole(await lootboxKey.MINTER_ROLE(), await mixer.getAddress())).wait();
 
+  await (await lootboxKey.setMixer(await mixer.getAddress())).wait();
+
   const consumeTo = process.env.CONSUME_TO || ethers.ZeroAddress;
 
-  // Recipe: 32 any distinct ids 1..8 => 1 lootbox key id=1 (BURN: keys consumed on-chain)
+  // Recipe: 8 Odyssey keys (ids 1..8) => 1 lootbox key id=1 (BURN: keys consumed on-chain)
   await (
     await mixer.setRecipe(recipeId, {
       tokenType: 0,
       inputToken: odysseyKeys,
       minId: 1,
       maxId: 8,
-      requiredTotal: 32,
+      requiredTotal: 8,
       mode: 1,
       consumeTo,
       outputKey: await lootboxKey.getAddress(),
@@ -80,8 +82,8 @@ async function main() {
   const quillsVault = await RewardVaultERC721.deploy(quillsErc721);
   await quillsVault.waitForDeployment();
 
-  const SomniaLootboxVRF = await ethers.getContractFactory("SomniaLootboxVRF");
-  const lootbox = await SomniaLootboxVRF.deploy(
+  const SomniaLootboxVRFS5 = await ethers.getContractFactory("SomniaLootboxVRFS5");
+  const lootbox = await SomniaLootboxVRFS5.deploy(
     await lootboxKey.getAddress(),
     vrfWrapper,
     vrfCallbackGas,
@@ -97,15 +99,14 @@ async function main() {
   const quillsCount = Number.parseInt(process.env.QUILLS_COUNT || "0", 10);
   if (!Number.isFinite(quillsCount) || quillsCount < 0) throw new Error("Bad QUILLS_COUNT");
 
-  // itemType 0: Quills via vault address (claimErc721 -> vault.dispense)
-  await (await lootbox.setPrize(0, quillsCount, 2, await quillsVault.getAddress(), 1)).wait();
-  // itemType 1..6: points (always-win loot table)
-  await (await lootbox.setPrize(1, 6500, 3, ethers.ZeroAddress, 500)).wait();
-  await (await lootbox.setPrize(2, 5500, 3, ethers.ZeroAddress, 750)).wait();
-  await (await lootbox.setPrize(3, 4000, 3, ethers.ZeroAddress, 1000)).wait();
-  await (await lootbox.setPrize(4, 3500, 3, ethers.ZeroAddress, 1200)).wait();
-  await (await lootbox.setPrize(5, 2700, 3, ethers.ZeroAddress, 1500)).wait();
-  await (await lootbox.setPrize(6, 2172, 3, ethers.ZeroAddress, 2000)).wait();
+  // itemType 0..5: points (S5); itemType 6: Quills via vault (claimErc721 -> vault.dispense)
+  await (await lootbox.setPrize(0, 26000, 3, ethers.ZeroAddress, 125)).wait();
+  await (await lootbox.setPrize(1, 22000, 3, ethers.ZeroAddress, 180)).wait();
+  await (await lootbox.setPrize(2, 16000, 3, ethers.ZeroAddress, 250)).wait();
+  await (await lootbox.setPrize(3, 14000, 3, ethers.ZeroAddress, 300)).wait();
+  await (await lootbox.setPrize(4, 10800, 3, ethers.ZeroAddress, 375)).wait();
+  await (await lootbox.setPrize(5, 8688, 3, ethers.ZeroAddress, 500)).wait();
+  await (await lootbox.setPrize(6, quillsCount, 2, await quillsVault.getAddress(), 1)).wait();
   const lock = (process.env.LOCK_CONFIG || "").toLowerCase();
   if (lock === "1" || lock === "true" || lock === "yes") {
     await (await lootbox.lockConfig()).wait();
@@ -157,7 +158,8 @@ async function main() {
       `NEXT_PUBLIC_LOOTBOX_KEY_ADDRESS=${deployed.lootboxKey}`,
       `NEXT_PUBLIC_LOOTBOX_ADDRESS=${deployed.lootbox}`,
       `NEXT_PUBLIC_RECIPE_ID=${deployed.recipeId}`,
-      `NEXT_PUBLIC_MIX_REQUIRED_TOTAL=32`,
+      `NEXT_PUBLIC_MIX_REQUIRED_TOTAL=8`,
+      `NEXT_PUBLIC_NFT_ITEM_TYPE=6`,
       `NEXT_PUBLIC_INPUT_KEY_IDS=1,2,3,4,5,6,7,8`,
       `NEXT_PUBLIC_LOOTBOX_KEY_IDS=1`,
       `NEXT_PUBLIC_EXPLORER_TX_BASE=https://explorer.somnia.network/tx/`
