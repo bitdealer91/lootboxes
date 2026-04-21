@@ -10,6 +10,7 @@ import Aurora from "./lootbox/Aurora";
 // @ts-expect-error TiltedCard is a JS component with no types
 import TiltedCard from "./lootbox/TiltedCard";
 import { formatPrizeTitle, PRIZES_BY_ITEM_TYPE } from "./lootbox/prizes";
+import { LEGACY_OPENS_BY_ADDRESS } from "./lootbox/legacyOpens";
 
 const LOOTBOX = (process.env.NEXT_PUBLIC_LOOTBOX_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`;
 // Input keys that are mixed into lootbox keys (Odyssey keys on mainnet; TestKeys1155 on testnet)
@@ -45,6 +46,8 @@ const EXPLORER_TX_BASE =
 
 const lootboxAbi = parseAbi([
   "function openWithKey(uint256 keyId) external",
+  "function userSuccessfulOpens(address user) view returns (uint256)",
+  "function maxSuccessfulOpensPerUser() view returns (uint256)",
   "event OpenRequested(address indexed user, uint256 requestId)",
   "event ItemAwarded(address indexed user, uint8 itemType, address token, uint256 id, uint256 amount)"
 ]);
@@ -243,6 +246,18 @@ export default function LootboxPage() {
     query: { enabled: !!uiAddress }
   });
 
+  const { data: lootboxOpenCapReads, refetch: refetchLootboxOpenCap } = useReadContracts({
+    allowFailure: true,
+    contracts:
+      uiAddress && LOOTBOX !== "0x0000000000000000000000000000000000000000"
+        ? [
+            { address: LOOTBOX, abi: lootboxAbi, functionName: "userSuccessfulOpens", args: [uiAddress] },
+            { address: LOOTBOX, abi: lootboxAbi, functionName: "maxSuccessfulOpensPerUser", args: [] }
+          ]
+        : [],
+    query: { enabled: !!uiAddress && LOOTBOX !== "0x0000000000000000000000000000000000000000" }
+  });
+
   const { writeContractAsync } = useWriteContract();
 
   const isLootboxConfigured = LOOTBOX !== "0x0000000000000000000000000000000000000000";
@@ -302,6 +317,29 @@ export default function LootboxPage() {
   const inputApproved = approvals?.[0]?.status === "success" ? Boolean(approvals[0].result) : false;
   const lootboxKeyApproved = approvals?.[1]?.status === "success" ? Boolean(approvals[1].result) : false;
 
+  const currentUserSuccessfulOpens = useMemo(() => {
+    const e = lootboxOpenCapReads?.[0] as unknown as { status?: string; result?: unknown } | undefined;
+    if (!e || e.status !== "success" || e.result === undefined) return 0n;
+    return BigInt(e.result as bigint);
+  }, [lootboxOpenCapReads]);
+
+  const maxOpensPerUser = useMemo(() => {
+    const e = lootboxOpenCapReads?.[1] as unknown as { status?: string; result?: unknown } | undefined;
+    if (!e || e.status !== "success" || e.result === undefined) return 2n;
+    return BigInt(e.result as bigint);
+  }, [lootboxOpenCapReads]);
+
+  const legacyOpensForUser = useMemo(() => {
+    if (!uiAddress) return 0n;
+    return BigInt(LEGACY_OPENS_BY_ADDRESS[uiAddress.toLowerCase()] ?? 0);
+  }, [uiAddress]);
+
+  const remainingOpenAllowance = useMemo(() => {
+    const used = legacyOpensForUser + currentUserSuccessfulOpens;
+    const left = maxOpensPerUser - used;
+    return left > 0n ? left : 0n;
+  }, [legacyOpensForUser, currentUserSuccessfulOpens, maxOpensPerUser]);
+
   useEffect(() => {
     // no-op (keyId selection removed; we use first available key)
   }, [availableKeyIds]);
@@ -314,9 +352,10 @@ export default function LootboxPage() {
       !awaitingSignature &&
       isLootboxConfigured &&
       isCorrectChain &&
-      availableKeyIds.length > 0
+      availableKeyIds.length > 0 &&
+      remainingOpenAllowance > 0n
     );
-  }, [uiConnected, uiAddress, opening, awaitingSignature, isLootboxConfigured, isCorrectChain, availableKeyIds.length]);
+  }, [uiConnected, uiAddress, opening, awaitingSignature, isLootboxConfigured, isCorrectChain, availableKeyIds.length, remainingOpenAllowance]);
 
   const keysDisplay = useMemo(() => {
     if (!lootboxKeyBalances) return "0";
@@ -471,8 +510,13 @@ export default function LootboxPage() {
       return;
     }
     if (!address) return;
+    if (remainingOpenAllowance <= 0n) {
+      setOpenError("Open limit reached for this wallet (legacy + new openings).");
+      return;
+    }
     setOpenError(null);
     setShowBurnModal(true);
+    void refetchLootboxOpenCap?.();
   }
 
   function beginMixFlow() {
@@ -733,7 +777,7 @@ export default function LootboxPage() {
       }
       pushTxToast("Lootbox opened", hash);
       // Refresh lootbox key balances so "Open another box" can be accurate.
-      await refetchLootboxKeyBalances?.();
+      await Promise.all([refetchLootboxKeyBalances?.(), refetchLootboxOpenCap?.()]);
       const fromBlock = receipt.blockNumber;
 
       // If ItemAwarded is emitted in the same tx, decode it.
@@ -847,6 +891,10 @@ export default function LootboxPage() {
   }
 
   function confirmBurn() {
+    if (remainingOpenAllowance <= 0n) {
+      if (typeof window !== "undefined") window.alert("Open limit reached for this wallet (legacy + new openings).");
+      return;
+    }
     const keyId = availableKeyIds[0] ?? null;
     if (!keyId) {
       if (typeof window !== "undefined") window.alert("No keys available");
@@ -1299,6 +1347,10 @@ export default function LootboxPage() {
               <p className="eyebrow">Lootbox</p>
               <h3>Open the lootbox?</h3>
               <p className="modal-sub">If you have a Lootbox Key, you can open once.</p>
+              <p className="modal-sub" style={{ opacity: 0.85 }}>
+                Legacy opens: <b>{legacyOpensForUser.toString()}</b>, new opens: <b>{currentUserSuccessfulOpens.toString()}</b>, total cap:{" "}
+                <b>{maxOpensPerUser.toString()}</b>, remaining: <b>{remainingOpenAllowance.toString()}</b>.
+              </p>
             </div>
             {!lootboxKeyApproved && (
               <div className="modal-sub" style={{ marginBottom: 12 }}>
