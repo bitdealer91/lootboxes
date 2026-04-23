@@ -1378,6 +1378,12 @@ export default function LootboxPage() {
             <div className="modal-head">
               <p className="eyebrow">Mixer</p>
               <h3>Convert keys into Lootbox Keys</h3>
+              <p className="modal-sub" style={{ fontWeight: 700 }}>
+                Limit: maximum 2 lootbox opens per wallet.
+              </p>
+              <p className="modal-sub" style={{ fontWeight: 700 }}>
+                You can still open: <b>{remainingOpenAllowance.toString()}</b>
+              </p>
               <p className="modal-sub">
                 Requires <b>{MIX_REQUIRED_TOTAL.toString()}</b> input keys (ids {INPUT_KEY_IDS[0]?.toString()}–{INPUT_KEY_IDS.at(-1)?.toString()}) per LootboxKey.
               </p>
