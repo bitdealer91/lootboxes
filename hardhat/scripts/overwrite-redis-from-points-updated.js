@@ -181,32 +181,19 @@ async function main() {
         await retry(() => withTimeout(redis.del(keyRewards), 10_000, `del rewards ${row.address}`), 3, "del rewards");
         await retry(() => withTimeout(redis.del(keyEvents), 10_000, `del events ${row.address}`), 3, "del events");
         await retry(() => withTimeout(redis.set(keyPoints, String(total)), 10_000, `set points ${row.address}`), 3, "set points");
-        if (eventsPayload.length) {
+        // One element per LPUSH: multi-arg lpush in some REST/Upstash paths duplicated entries.
+        for (let e = 0; e < eventsPayload.length; e += 1) {
+          const ev = eventsPayload[e];
           await retry(
-            () =>
-              withTimeout(
-                redis.lpush(
-                  keyEvents,
-                  ...eventsPayload.map((x) => JSON.parse(JSON.stringify(x)))
-                ),
-                10_000,
-                `lpush events ${row.address}`
-              ),
+            () => withTimeout(redis.lpush(keyEvents, ev), 10_000, `lpush event ${e} ${row.address}`),
             3,
             "lpush events"
           );
         }
-        if (itemsPayload.length) {
+        for (let r = 0; r < itemsPayload.length; r += 1) {
+          const it = itemsPayload[r];
           await retry(
-            () =>
-              withTimeout(
-                redis.lpush(
-                  keyRewards,
-                  ...itemsPayload.map((x) => JSON.parse(JSON.stringify(x)))
-                ),
-                10_000,
-                `lpush rewards ${row.address}`
-              ),
+            () => withTimeout(redis.lpush(keyRewards, it), 10_000, `lpush reward ${r} ${row.address}`),
             3,
             "lpush rewards"
           );

@@ -52,6 +52,35 @@ function getRpcUrl() {
   return process.env.RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || "";
 }
 
+/** Stale import path could duplicate the same `id` in the list; keep lrange order (newest first). */
+function dedupeRewardItemsById(items: RewardEntry[]): RewardEntry[] {
+  const seen = new Set<string>();
+  const out: RewardEntry[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+  }
+  return out;
+}
+
+function dedupePointsEvents(events: unknown[]): unknown[] {
+  const seen = new Set<string>();
+  const out: unknown[] = [];
+  for (const ev of events) {
+    if (!ev || typeof ev !== "object") {
+      out.push(ev);
+      continue;
+    }
+    const o = ev as Record<string, unknown>;
+    const k = `${String(o.txHash)}:${String(o.logIndex)}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(ev);
+  }
+  return out;
+}
+
 export async function GET(req: Request) {
   const redis = getRedis();
   if (!redis) {
@@ -74,12 +103,14 @@ export async function GET(req: Request) {
     const total = ((await redis.get(pk)) as string | null) || "0";
     const includeHistory = searchParams.get("history") === "1";
     if (!includeHistory) return NextResponse.json({ total });
-    const events = (await redis.lrange(ek, 0, 199)) as unknown[];
+    const events = dedupePointsEvents((await redis.lrange(ek, 0, 199)) as unknown[]);
     return NextResponse.json({ total, events });
   }
 
   const key = keyFor(address, chainId, lootbox);
-  const items = (await redis.lrange(key, 0, 199)) as RewardEntry[];
+  const items = dedupeRewardItemsById(
+    (await redis.lrange(key, 0, 199)) as RewardEntry[]
+  );
   return NextResponse.json({ items });
 }
 

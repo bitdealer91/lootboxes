@@ -143,6 +143,10 @@ export default function LootboxPage() {
     createdAt: number;
     claimed?: boolean;
   };
+  type PendingOpenTx = {
+    txHash: `0x${string}`;
+    createdAt: number;
+  };
   const [rewardHistory, setRewardHistory] = useState<RewardEntry[]>([]);
   const [claimingRewardId, setClaimingRewardId] = useState<string | null>(null);
   const [nftClaimableByVault, setNftClaimableByVault] = useState<Record<string, bigint>>({});
@@ -398,6 +402,62 @@ export default function LootboxPage() {
     if (!uiAddress) return null;
     return `lootboxes:rewards:${chainId}:${uiAddress.toLowerCase()}:${LOOTBOX.toLowerCase()}`;
   }, [uiAddress, chainId]);
+  const pendingOpenTxsStorageKey = useMemo(() => {
+    if (!uiAddress) return null;
+    return `lootboxes:pending-opens:${chainId}:${uiAddress.toLowerCase()}:${LOOTBOX.toLowerCase()}`;
+  }, [uiAddress, chainId]);
+
+  function readPendingOpenTxs(): PendingOpenTx[] {
+    if (!pendingOpenTxsStorageKey) return [];
+    try {
+      const raw = window.localStorage.getItem(pendingOpenTxsStorageKey);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as PendingOpenTx[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((x) => x && typeof x.txHash === "string" && x.txHash.startsWith("0x"));
+    } catch {
+      return [];
+    }
+  }
+
+  function writePendingOpenTxs(next: PendingOpenTx[]) {
+    if (!pendingOpenTxsStorageKey) return;
+    try {
+      window.localStorage.setItem(pendingOpenTxsStorageKey, JSON.stringify(next.slice(0, 50)));
+    } catch {
+      // ignore
+    }
+  }
+
+  function addPendingOpenTx(txHash: `0x${string}`) {
+    const prev = readPendingOpenTxs();
+    const has = prev.some((x) => x.txHash.toLowerCase() === txHash.toLowerCase());
+    if (has) return;
+    writePendingOpenTxs([{ txHash, createdAt: Date.now() }, ...prev]);
+  }
+
+  function removePendingOpenTx(txHash: `0x${string}`) {
+    const prev = readPendingOpenTxs();
+    writePendingOpenTxs(prev.filter((x) => x.txHash.toLowerCase() !== txHash.toLowerCase()));
+  }
+
+  async function indexRewardTx(txHash: `0x${string}`): Promise<boolean> {
+    if (!ENABLE_REWARDS_REDIS || !address) return false;
+    try {
+      const res = await fetch("/api/rewards", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ address, chainId, lootbox: LOOTBOX, txHash })
+      });
+      if (!res.ok) return false;
+      const body = (await res.json().catch(() => ({}))) as { ok?: boolean; deduped?: boolean };
+      const success = !!body.ok || !!body.deduped;
+      if (success) removePendingOpenTx(txHash);
+      return success;
+    } catch {
+      return false;
+    }
+  }
 
   useEffect(() => {
     if (!rewardsStorageKey) return;
@@ -436,6 +496,41 @@ export default function LootboxPage() {
       }
     })();
   }, [ENABLE_REWARDS_REDIS, address, isConnected, chainId, isLootboxConfigured]);
+
+  // Self-heal after browser refresh/crash: replay pending open tx hashes into Redis index.
+  useEffect(() => {
+    if (!ENABLE_REWARDS_REDIS) return;
+    if (!isConnected || !address) return;
+    if (!pendingOpenTxsStorageKey) return;
+    let cancelled = false;
+    void (async () => {
+      const pending = readPendingOpenTxs();
+      if (!pending.length) return;
+      let changed = false;
+      for (const row of pending) {
+        if (cancelled) return;
+        const ok = await indexRewardTx(row.txHash);
+        if (ok) changed = true;
+      }
+      if (!changed) return;
+      try {
+        const qs = new URLSearchParams({
+          address,
+          chainId: String(chainId),
+          lootbox: LOOTBOX
+        });
+        const res = await fetch(`/api/rewards?${qs.toString()}`, { method: "GET" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { items?: RewardEntry[] };
+        if (Array.isArray(data.items)) setRewardHistory(data.items);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ENABLE_REWARDS_REDIS, isConnected, address, chainId, pendingOpenTxsStorageKey]);
 
   useEffect(() => {
     if (!rewardsStorageKey) return;
@@ -737,6 +832,7 @@ export default function LootboxPage() {
       });
       setAwaitingSignature(false);
       setLastOpenTxHash(hash);
+      addPendingOpenTx(hash);
 
       // tx submitted -> now start opening UI
       setOpening(true);
@@ -766,6 +862,7 @@ export default function LootboxPage() {
       // If the tx reverted, stop the UI immediately (no reward will be emitted).
       // This can happen if a prize path fails (e.g. WL mint) or if the contract is out of funds.
       if ((receipt as unknown as { status?: string }).status === "reverted") {
+        removePendingOpenTx(hash);
         setOpenError("Transaction reverted. No reward was issued.");
         setOpening(false);
         setChestDone(false);
@@ -805,13 +902,7 @@ export default function LootboxPage() {
             },
             ...prev
           ]);
-          if (ENABLE_REWARDS_REDIS) {
-            void fetch("/api/rewards", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ address, chainId, lootbox: LOOTBOX, txHash: hash })
-            });
-          }
+          if (ENABLE_REWARDS_REDIS) void indexRewardTx(hash);
           return;
         }
       } catch {
@@ -848,13 +939,7 @@ export default function LootboxPage() {
               },
               ...prev
             ]);
-            if (ENABLE_REWARDS_REDIS) {
-              void fetch("/api/rewards", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ address, chainId, lootbox: LOOTBOX, txHash: hash })
-              });
-            }
+            if (ENABLE_REWARDS_REDIS) void indexRewardTx(hash);
             return;
           }
         }
@@ -875,13 +960,7 @@ export default function LootboxPage() {
         },
         ...prev
       ]);
-      if (ENABLE_REWARDS_REDIS) {
-        void fetch("/api/rewards", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ address, chainId, lootbox: LOOTBOX, txHash: hash })
-        });
-      }
+      if (ENABLE_REWARDS_REDIS) void indexRewardTx(hash);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Transaction failed";
       setOpenError(msg);
